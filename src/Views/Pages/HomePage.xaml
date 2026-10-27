@@ -7,62 +7,29 @@
       mc:Ignorable="d" 
       d:DesignHeight="450" d:DesignWidth="800"
       Title="HomePage">
-    <Grid>
+    <Grid Margin="12">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="3*"/>
-            <ColumnDefinition Width="2*"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        <Grid Grid.Row="0" Grid.Column="0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="*"/>
-            </Grid.RowDefinitions>
-            <Grid Grid.Row="0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="2*"/>
-                    <RowDefinition Height="30*"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="8*"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <TextBox Name="textNotice" AcceptsReturn="True" TextWrapping="Wrap" IsReadOnly="True" Grid.Column="1" Grid.Row="1" VerticalScrollBarVisibility="Auto"/>
-            </Grid>
-            <Grid Grid.Row="1">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="3*"/>
-                </Grid.RowDefinitions>
-                <Button Content="教程" Name="NoticeButton" Command="{Binding NoticeButton_Click}" HorizontalAlignment="Center" VerticalAlignment="Center" HorizontalContentAlignment="Center" FontSize="18" Width="120" Height="35"/>
-                <Grid Grid.Row="1">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid Grid.Column="0">
-                        <Button Content="宽带登录" Name="LoginButton" Command="{Binding LoginButton_Click}" HorizontalAlignment="Center" VerticalAlignment="Center" HorizontalContentAlignment="Center" FontSize="18" Width="120" Height="45" Click="LoginButton_Click"/>
-                    </Grid>
-                    <Grid Grid.Column="1">
-                        <Button Content="运营商绑定" Name="BindButton" Command="{Binding BindButton_Click}" HorizontalAlignment="Center" VerticalAlignment="Center" HorizontalContentAlignment="Center" FontSize="18" Width="120" Height="45"/>
-                    </Grid>
-                </Grid>
-            </Grid>
-        </Grid>
+        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Top">
+            <Button Content="立即登录" Name="LoginButton" Command="{Binding LoginButton_Click}" FontSize="16" Width="120" Height="40" Margin="0,0,0,10" Click="LoginButton_Click"/>
+            <Button Content="运营商绑定" Name="BindButton" Command="{Binding BindButton_Click}" FontSize="16" Width="120" Height="40"/>
+            <Button Content="清空日志" Command="{Binding ClearLogCommand}" FontSize="16" Width="120" Height="40" Margin="0,10,0,0"
+                    ToolTip="清空当前显示的日志，保留磁盘历史文件；重启后会重新加载历史日志。"/>
+        </StackPanel>
         <Grid Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="30*"/>
-                <RowDefinition Height="2*"/>
-            </Grid.RowDefinitions>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="8*"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <ScrollViewer  Grid.Column="1" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Name="sv1" Background="#CCFFFFFF">
-                <TextBox Name="textLog" AcceptsReturn="True" TextWrapping="Wrap" IsReadOnly="True" Text="{Binding TxtLog, Mode=OneWay}" TextChanged="textLog_TextChanged" SelectionBrush="{x:Null}" BorderBrush="{x:Null}"/>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Name="sv1" Background="#CCFFFFFF">
+                <TextBox Name="textLog" AcceptsReturn="True" TextWrapping="Wrap" IsReadOnly="True" IsReadOnlyCaretVisible="True" Text="{Binding TxtLog, Mode=OneWay}" TextChanged="textLog_TextChanged" PreviewKeyDown="Log_PreviewKeyDown" BorderBrush="{x:Null}">
+                    <TextBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="复制选中内容" Click="CopySelectedLog_Click"/>
+                            <MenuItem Header="复制全部日志" Click="CopyAllLog_Click"/>
+                            <Separator/>
+                            <MenuItem Header="全选" Click="SelectAllLog_Click"/>
+                        </ContextMenu>
+                    </TextBox.ContextMenu>
+                </TextBox>
             </ScrollViewer>
         </Grid>
     </Grid>

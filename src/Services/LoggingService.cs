@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text;
+using System.Collections.Generic;
 
 namespace cpu_net.Services
 {
@@ -57,35 +59,38 @@ namespace cpu_net.Services
         /// <summary>
         /// 写入运行时日志（同步入口，内部转异步，不阻塞调用方）
         /// </summary>
-        public static void WriteTextLog(string log, string logName, bool testMode)
+        public static void WriteTextLog(string log, string logName)
         {
-            _ = WriteTextLogAsync(log, logName, testMode);
+            _ = WriteTextLogAsync(log, logName);
         }
 
         /// <summary>
         /// 异步写入运行时日志
         /// </summary>
-        public static async Task WriteTextLogAsync(string log, string logName, bool testMode)
+        // testMode 仅保留历史调用签名；主应用不再使用第二套日志。
+        public static async Task WriteTextLogAsync(string log, string logName, bool testMode = false)
         {
-            if (!testMode && logName == "RecordLog")
-            {
-                return;
-            }
 
             string logDir = Path.Combine(LogBaseDir, logName);
 
-            var now = DateTime.Now;
-            string fileName = logName == "RecordLog"
-                ? $"{now.Year}{now.Month:D2}{now.Day:D2}.log"
-                : $"{now.Year}{now.Month:D2}.log";
-
-            string logPath = Path.Combine(logDir, fileName);
+            string logPath = Path.Combine(logDir, "runtime.log");
             var formattedLog = $"{DateTime.Now:M-d HH:mm:ss}  {log}{Environment.NewLine}";
 
             await LogSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
                 Directory.CreateDirectory(logDir);
+                long limit = Math.Clamp(new SettingsStore().Read().LogFileSizeMb, 1, 100) * 1024L * 1024;
+                if (File.Exists(logPath) && new FileInfo(logPath).Length + Encoding.UTF8.GetByteCount(formattedLog) > limit)
+                {
+                    // 仅轮转本版本专用文件，不触碰旧版按月保存的日志。
+                    for (int index = 3; index >= 1; index--)
+                    {
+                        string source = Path.Combine(logDir, $"runtime.{index}.log");
+                        if (File.Exists(source)) File.Move(source, Path.Combine(logDir, $"runtime.{index + 1}.log"), true);
+                    }
+                    File.Move(logPath, Path.Combine(logDir, "runtime.1.log"), true);
+                }
                 for (int attempt = 0; ; attempt++)
                 {
                     try
@@ -116,23 +121,22 @@ namespace cpu_net.Services
         public static string ReadLogText(string logName, int maxLines = 200)
         {
             var now = DateTime.Now;
-            string fileName = logName == "RecordLog"
-                ? $"{now.Year}{now.Month:D2}{now.Day:D2}.log"
-                : $"{now.Year}{now.Month:D2}.log";
-            string logPath = Path.Combine(LogBaseDir, logName, fileName);
-
-            if (!File.Exists(logPath))
-            {
-                return string.Empty;
-            }
+            string fileName = $"{now.Year}{now.Month:D2}.log";
+            string directory = Path.Combine(LogBaseDir, logName);
 
             LogSemaphore.Wait();
             try
             {
-                var allLines = File.ReadAllLines(logPath);
-                var lines = allLines.Length > maxLines
-                    ? allLines.Skip(allLines.Length - maxLines)
-                    : allLines;
+                if (maxLines <= 0) return string.Empty;
+                var paths = new List<string> { Path.Combine(directory, "runtime.log") };
+                for (int index = 1; index <= 4; index++) paths.Add(Path.Combine(directory, $"runtime.{index}.log"));
+                paths.Add(Path.Combine(directory, fileName));
+                var lines = new List<string>();
+                foreach (string path in paths)
+                {
+                    if (File.Exists(path)) lines.InsertRange(0, ReadTail(path, maxLines - lines.Count));
+                    if (lines.Count >= maxLines) break;
+                }
                 return string.Join(Environment.NewLine, lines);
             }
             catch
@@ -143,6 +147,38 @@ namespace cpu_net.Services
             {
                 LogSemaphore.Release();
             }
+        }
+
+        private static string[] ReadTail(string path, int maxLines)
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            long end = stream.Length;
+            long start = end;
+            int lineBreaks = 0;
+            byte[] buffer = new byte[4096];
+            // 限制单文件尾部读取量，避免损坏文件中的超长单行耗尽内存。
+            long minimum = Math.Max(0, end - 1024 * 1024);
+            while (start > minimum && lineBreaks <= maxLines)
+            {
+                int count = (int)Math.Min(buffer.Length, start - minimum);
+                start -= count;
+                stream.Position = start;
+                stream.ReadExactly(buffer.AsSpan(0, count));
+                for (int index = 0; index < count; index++) if (buffer[index] == (byte)'\n') lineBreaks++;
+            }
+            stream.Position = start;
+            byte[] tail = new byte[(int)(end - start)];
+            stream.ReadExactly(tail);
+            int offset = 0;
+            if (start > 0)
+            {
+                int newline = Array.IndexOf(tail, (byte)'\n');
+                if (newline < 0) return Array.Empty<string>();
+                offset = newline + 1;
+            }
+            return Encoding.UTF8.GetString(tail, offset, tail.Length - offset)
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .TakeLast(maxLines).Select(line => line.TrimEnd('\r')).ToArray();
         }
 
         // 独立的按进程备用文件，日志失败时不递归调用日志服务。
@@ -163,3 +199,4 @@ namespace cpu_net.Services
         }
     }
 }
+

@@ -10,8 +10,8 @@
         mc:Ignorable="d"
         Closing="Window_Closing"
         StateChanged="Window_StateChanged"
-        Title="CPU网络连接" Height="500" Width="800" TextBlock.TextAlignment="Center"
-        MinHeight="500" MinWidth="800">
+        Title="CPU_NET_Lite" Height="420" Width="640" TextBlock.TextAlignment="Center"
+        MinHeight="320" MinWidth="480" ResizeMode="CanResizeWithGrip">
     <Grid x:Name="MainGrid">
         <Grid.Background>
             <SolidColorBrush Color="White"/>
@@ -25,15 +25,11 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Button Grid.Column="0" x:Name="Home_Button" Content="主    页" HorizontalAlignment="Center" VerticalAlignment="Center" 
                     BorderBrush="White" FontSize="15" Foreground="Black" BorderThickness="0,0,0,2" Padding="20,5" 
                     Style="{StaticResource {x:Static ToolBar.ButtonStyleKey}}" Click="Home_Button_Click"/>
-            <Button Grid.Column="1" x:Name="Elec_Button" Content="电费查询" HorizontalAlignment="Center" VerticalAlignment="Center" 
-                    BorderBrush="White" FontSize="15" Foreground="Black" BorderThickness="0,0,0,2" Padding="20,5" 
-                    Style="{StaticResource {x:Static ToolBar.ButtonStyleKey}}" Click="Elec_Button_Click"/>
-            <Button Grid.Column="2" x:Name="Conf_Button" Content="设    置" HorizontalAlignment="Center" VerticalAlignment="Center" 
+            <Button Grid.Column="1" x:Name="Conf_Button" Content="设    置" HorizontalAlignment="Center" VerticalAlignment="Center" 
                     BorderBrush="White" FontSize="15" Foreground="Black" BorderThickness="0,0,0,2" Padding="20,5" 
                     Style="{StaticResource {x:Static ToolBar.ButtonStyleKey}}" Click="Conf_Button_Click"/>
         </Grid>

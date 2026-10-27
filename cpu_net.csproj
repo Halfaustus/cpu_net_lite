@@ -1,22 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>True</UseWindowsForms>
-    <PackageIcon>assets\shinnku.jpg</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <ApplicationIcon>assets\shinnku.ico</ApplicationIcon>
-    <Authors>真红@FrostNova-sora</Authors>
-    <Title>CPU_NET</Title>
+    <Authors>Halfaustus</Authors>
+    <RepositoryUrl>https://github.com/Halfaustus/cpu_net_lite</RepositoryUrl>
+    <Title>CPU_NET_Lite</Title>
+    <Product>CPU_NET_Lite</Product>
     <StartupObject>cpu_net.Program</StartupObject>
-    <BaseOutputPath>D:\py\cpu_net\workingspace\bin</BaseOutputPath>
-    <BaseIntermediateOutputPath>D:\py\cpu_net\workingspace\obj</BaseIntermediateOutputPath>
     <IsPublishable>True</IsPublishable>
-    <Version>4.2.0</Version>
-    <AssemblyVersion>4.2.0</AssemblyVersion>
-    <FileVersion>4.2.0</FileVersion>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <DefaultItemExcludes>$(DefaultItemExcludes);.local-archive\**;artifacts\**;openwrt\**;OpenWrt.txt;tests\**</DefaultItemExcludes>
     <IncludeSymbols>False</IncludeSymbols>
     <NoWin32Manifest>true</NoWin32Manifest>
   </PropertyGroup>
@@ -30,27 +30,9 @@
   <ItemGroup>
     <Compile Remove="obj\**" />
     <Compile Remove="tests\**" />
-    <Compile Remove="uninstaller\**" />
-    <Compile Remove="SetupBootstrapper\**" />
     <EmbeddedResource Remove="obj\**" />
-    <EmbeddedResource Remove="uninstaller\**" />
-    <EmbeddedResource Remove="SetupBootstrapper\**" />
     <None Remove="obj\**" />
-    <None Remove="uninstaller\**" />
-    <None Remove="SetupBootstrapper\**" />
     <Page Remove="obj\**" />
-    <Page Remove="uninstaller\**" />
-    <Page Remove="SetupBootstrapper\**" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Remove="assets\shinnku.jpg" />
-  </ItemGroup>
-  <ItemGroup>
-    <Resource Include="assets\shinnku.jpg">
-      <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
   </ItemGroup>
   <ItemGroup>
     <Resource Include="assets\shinnku.ico">
@@ -60,28 +42,13 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.0" />
-    <PackageReference Include="MailKit" Version="4.16.0" />
-    <PackageReference Include="Prism.Core" Version="9.0.537" />
-    <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
-    <PackageReference Include="System.Runtime.Caching" Version="8.0.1" />
-    <PackageReference Include="Velopack" Version="0.0.1298" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Update="Properties\Settings.Designer.cs">
-      <DesignTimeSharedInput>True</DesignTimeSharedInput>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Settings.settings</DependentUpon>
-    </Compile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Update="Properties\Settings.settings">
-      <Generator>SettingsSingleFileGenerator</Generator>
-      <LastGenOutput>Settings.Designer.cs</LastGenOutput>
-    </None>
     <None Update="README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
     </None>
   </ItemGroup>
 </Project>
+

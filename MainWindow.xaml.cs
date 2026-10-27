@@ -1,11 +1,10 @@
 using cpu_net.Model;
-using cpu_net.Services;
 using cpu_net.ViewModel;
 using cpu_net.Views.Pages;
 using System;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Media;
 
 namespace cpu_net
@@ -18,7 +17,6 @@ namespace cpu_net
         [Flags]
         enum EXECUTION_STATE : uint
         {
-            ES_AWAYMODE_REQUIRED = 0x00000040,
             ES_CONTINUOUS = 0x80000000,
             ES_DISPLAY_REQUIRED = 0x00000002,
             ES_SYSTEM_REQUIRED = 0x00000001
@@ -26,59 +24,53 @@ namespace cpu_net
 
         private static readonly Brush DarkBlueBrush = new SolidColorBrush(Colors.DarkBlue);
         private static readonly Brush WhiteBrush = new SolidColorBrush(Colors.White);
-        private static readonly System.Windows.Media.Imaging.BitmapImage? DefaultIcon = LoadDefaultIcon();
-
-        private static System.Windows.Media.Imaging.BitmapImage? LoadDefaultIcon()
-        {
-            try
-            {
-                string path = System.IO.Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "assets/shinnku.ico");
-                if (!System.IO.File.Exists(path)) return null;
-                var icon = new System.Windows.Media.Imaging.BitmapImage(new Uri(path, UriKind.Absolute));
-                icon.Freeze();
-                return icon;
-            }
-            catch { return null; }
-        }
-
         private HomePage _cachedHomePage = new HomePage();
         private ConfigurationPage _cachedConfigurationPage = new ConfigurationPage();
-        private ElectricityPage _cachedElectricityPage = new ElectricityPage();
         private readonly MainViewModel _vm = new MainViewModel();
 
         public MainWindow()
         {
             InitializeComponent();
-            PreventSleep();
+            IsVisibleChanged += (_, _) => { if (IsVisible) _vm.ResumeLogRefresh(); };
             _cachedHomePage.ParentWindow = this;
             _cachedConfigurationPage.ParentWindow = this;
-            _cachedElectricityPage.ParentWindow = this;
             ChangePage("home");
             DataContext = _vm;
 
-            var settingData = new SettingModel();
+            if (Program.IsPreview)
+            {
+                Title += "（预览模式）";
+                _vm.Info("预览模式：可查看窗口与设置，不认证、不保存设置、不执行自动任务。");
+                return;
+            }
+
+            _vm.Info("CPU_NET_Lite 已以正常模式启动。");
+            var settingData = new SettingModel().Read();
+            try { ApplyPowerSettings(settingData.PreventSystemSleep, settingData.PreventDisplaySleep); }
+            catch (InvalidOperationException ex) { _vm.Info(ex.Message); }
             if (settingData.PathExist())
             {
-                settingData = settingData.Read();
                 if (settingData.NetworkLoginEnabled && settingData.IsAutoLogin)
                 {
-                    loginToast();
+                    LoginAtStartup();
                 }
                 if (settingData.IsAutoMin)
                 {
                     this.Visibility = Visibility.Hidden;
                 }
-                ApplyBackgroundAndIcon();
             }
         }
 
-        private void PreventSleep()
+        public void ApplyPowerSettings(bool preventSystemSleep, bool preventDisplaySleep)
         {
-            SetThreadExecutionState(
-                EXECUTION_STATE.ES_CONTINUOUS |
-                EXECUTION_STATE.ES_SYSTEM_REQUIRED |
-                EXECUTION_STATE.ES_DISPLAY_REQUIRED
-            );
+            if (Program.IsPreview) return;
+            // 电源请求属于调用线程，启动和切换均在窗口线程执行。
+            Dispatcher.VerifyAccess();
+            var flags = EXECUTION_STATE.ES_CONTINUOUS;
+            if (preventSystemSleep) flags |= EXECUTION_STATE.ES_SYSTEM_REQUIRED;
+            if (preventDisplaySleep) flags |= EXECUTION_STATE.ES_DISPLAY_REQUIRED;
+            if (SetThreadExecutionState(flags) == 0)
+                throw new InvalidOperationException("电源选项应用失败，请重新切换或重启客户端。");
         }
 
         private void AllowSleep()
@@ -89,7 +81,6 @@ namespace cpu_net
         private void ChangePage(string name)
         {
             Home_Button.BorderBrush = WhiteBrush;
-            Elec_Button.BorderBrush = WhiteBrush;
             Conf_Button.BorderBrush = WhiteBrush;
 
             switch (name)
@@ -98,10 +89,6 @@ namespace cpu_net
                     Home_Button.BorderBrush = DarkBlueBrush;
                     PageFrame.Content = _cachedHomePage;
                     break;
-                case "electricity":
-                    Elec_Button.BorderBrush = DarkBlueBrush;
-                    PageFrame.Content = _cachedElectricityPage;
-                    break;
                 case "conf":
                     Conf_Button.BorderBrush = DarkBlueBrush;
                     PageFrame.Content = _cachedConfigurationPage;
@@ -109,68 +96,9 @@ namespace cpu_net
             }
         }
 
-        public void NavigateToSettings(string section)
+        private async void LoginAtStartup()
         {
-            ChangePage("conf");
-            _cachedConfigurationPage.MenuListBox.SelectedIndex = section switch
-            {
-                "electricity" => 1,
-                "email" => 2,
-                "background" => 3,
-                _ => 0
-            };
-        }
-
-        public void ApplyBackgroundAndIcon()
-        {
-            var setting = new SettingModel();
-            if (!setting.PathExist()) return;
-            setting = setting.Read();
-
-            // 应用背景
-            var brush = ImageProcessingService.CreateBackgroundBrush(setting.BackgroundImagePath, setting.BackgroundOpacity);
-            if (brush != null)
-            {
-                MainGrid.Background = brush;
-            }
-            else
-            {
-                MainGrid.Background = new SolidColorBrush(Colors.White);
-            }
-
-            // 应用文本框透明度
-            byte alpha = (byte)(255 * Math.Clamp(setting.TextBoxOpacity, 0.0, 1.0));
-            var textBoxBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(alpha, 255, 255, 255));
-            textBoxBrush.Freeze();
-            System.Windows.Application.Current.Resources["TextBoxBackgroundBrush"] = textBoxBrush;
-
-            // 应用图标
-            if (!string.IsNullOrWhiteSpace(setting.CustomIconPath) && System.IO.File.Exists(setting.CustomIconPath))
-            {
-                try
-                {
-                    var iconUri = new Uri(setting.CustomIconPath, UriKind.Absolute);
-                    this.Icon = new System.Windows.Media.Imaging.BitmapImage(iconUri);
-                }
-                catch
-                {
-                    this.Icon = DefaultIcon;
-                }
-            }
-            else
-            {
-                this.Icon = DefaultIcon;
-            }
-        }
-
-        public void loginToast()
-        {
-            int result = _vm.LoginOnline();
-            if (result == 0 && this.Visibility == Visibility.Collapsed)
-            {
-                // Toast notification removed for .NET 8 compatibility
-                // Using simple log instead
-            }
+            await Task.Run(() => _vm.LoginOnline());
             ChangePage("home");
         }
 
@@ -193,11 +121,6 @@ namespace cpu_net
             ChangePage("home");
         }
 
-        private void Elec_Button_Click(object sender, RoutedEventArgs e)
-        {
-            ChangePage("electricity");
-        }
-
         private void Conf_Button_Click(object sender, RoutedEventArgs e)
         {
             ChangePage("conf");
@@ -205,8 +128,11 @@ namespace cpu_net
 
         protected override void OnClosed(EventArgs e)
         {
-            AllowSleep();
+            _vm.StopBackgroundWork();
+            if (!Program.IsPreview) AllowSleep();
             base.OnClosed(e);
         }
     }
 }
+
+

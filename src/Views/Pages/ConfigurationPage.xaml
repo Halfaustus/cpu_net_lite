@@ -4,7 +4,6 @@
       xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
       xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
       xmlns:local="clr-namespace:cpu_net.Views.Pages"
-      xmlns:controls="clr-namespace:cpu_net.Views.Controls"
       xmlns:vm="clr-namespace:cpu_net.ViewModel"
       mc:Ignorable="d" 
       d:DesignHeight="450" d:DesignWidth="800"
@@ -21,7 +20,7 @@
     </Page.Resources>
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="160"/>
+            <ColumnDefinition Width="100"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         
@@ -29,10 +28,7 @@
         <Border Grid.Column="0" BorderBrush="#E0E0E0" BorderThickness="0,0,1,0" Background="#CCF5F5F5">
             <ListBox x:Name="MenuListBox" BorderThickness="0" Background="Transparent">
                 <ListBoxItem Content="网络设置" Tag="network" IsSelected="True" Padding="15,10" FontSize="14"/>
-                <ListBoxItem Content="电费设置" Tag="electricity" Padding="15,10" FontSize="14"/>
-                <ListBoxItem Content="邮件设置" Tag="email" Padding="15,10" FontSize="14"/>
-                <ListBoxItem Content="背景与图标" Tag="background" Padding="15,10" FontSize="14"/>
-                <ListBoxItem Content="代理设置" Tag="proxy" Padding="15,10" FontSize="14"/>
+                <ListBoxItem Content="日志配置" Tag="logging" Padding="15,10" FontSize="14"/>
                 <ListBoxItem Content="关于" Tag="about" Padding="15,10" FontSize="14"/>
             </ListBox>
         </Border>
@@ -45,7 +41,7 @@
             </Grid.RowDefinitions>
             
             <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" x:Name="ContentScrollViewer">
-                <StackPanel Margin="20">
+                <StackPanel Margin="12">
                     
                     <!-- 网络设置面板 -->
                     <Grid x:Name="NetworkPanel">
@@ -54,14 +50,15 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
                         
                         <TextBlock Text="网络设置" FontSize="20" FontWeight="Bold" Margin="0,0,0,15"/>
                         
-                        <CheckBox Grid.Row="1" Name="NetworkEnabledCheckBox" Content="启用网络登录" FontSize="14" Margin="0,0,0,15"/>
+                        <CheckBox Grid.Row="1" Name="NetworkEnabledCheckBox" Content="启用网络登录" FontSize="14" Margin="0,0,0,15" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed"/>
                         
                         <!-- 账户信息 -->
-                        <Border Grid.Row="2" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="6" Padding="15" Margin="0,0,0,15"
+                        <Border Grid.Row="2" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,12"
                                 Background="#CCFFFFFF">
                             <Grid>
                                 <Grid.RowDefinitions>
@@ -71,8 +68,8 @@
                                 <TextBlock Text="账户信息" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
                                 <Grid Grid.Row="1">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="100"/>
-                                        <ColumnDefinition Width="250"/>
+                                        <ColumnDefinition Width="70"/>
+                                        <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="32"/>
@@ -87,14 +84,19 @@
                                                  InputMethod.IsInputMethodEnabled="False"/>
                                     <TextBlock Grid.Row="2" Grid.Column="0" Text="运营商:" FontSize="14" VerticalAlignment="Center"/>
                                     <ComboBox Grid.Row="2" Grid.Column="1" Name="carrier" FontSize="14" Padding="3"
-                                              ItemsSource="{Binding Path=ComboxList,Mode=TwoWay,Source={StaticResource carrierVM}}" 
+                                              ItemsSource="{Binding Path=ComboxList,Mode=OneWay,Source={StaticResource carrierVM}}" 
                                               DisplayMemberPath="Text" SelectedValuePath="Key"/>
                                 </Grid>
                             </Grid>
                         </Border>
                         
+                        <StackPanel Grid.Row="3" Margin="0,0,0,15">
+                            <Button Content="保存网络配置" Style="{StaticResource ModuleSaveButton}" Margin="0,0,0,8" Click="SaveNetworkConfiguration_Click"/>
+                            <TextBlock x:Name="SettingsStatusText" Text="账号、密码和运营商需点击保存网络配置；下方设置修改后立即保存。" TextWrapping="Wrap" FontSize="12" Foreground="#666"/>
+                        </StackPanel>
+
                         <!-- 登录模式与选项 -->
-                        <Grid Grid.Row="3">
+                        <Grid Grid.Row="4">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
@@ -110,18 +112,21 @@
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Text="启动选项" FontSize="14" FontWeight="Bold" Margin="0,0,0,8"/>
                                     <StackPanel>
-                                        <CheckBox Name="AutoRun" Margin="0,3">开机启动</CheckBox>
-                                        <CheckBox Name="AutoLogin" Margin="0,3">自动登录</CheckBox>
-                                        <CheckBox Name="AutoMin" Margin="0,3">自动最小化</CheckBox>
-                                        <CheckBox Name="SetLogin" Margin="0,3">定时检测</CheckBox>
+                                        <CheckBox Name="AutoRun" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed">开机启动</CheckBox>
+                                        <CheckBox Name="AutoLogin" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed">启动时登录</CheckBox>
+                                        <CheckBox Name="AutoMin" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed">启动时收起</CheckBox>
+                                        <CheckBox Name="SetLogin" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed">定时检测</CheckBox>
+                                        <CheckBox Name="PreventSleepCheckBox" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed"
+                                                  ToolTip="运行期间阻止系统自动休眠；屏幕关闭由下面的选项独立控制。">阻止系统休眠</CheckBox>
+                                        <CheckBox Name="PreventDisplaySleepCheckBox" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed"
+                                                  ToolTip="运行期间保持屏幕亮起。若还需避免系统自动休眠，请同时勾选阻止系统休眠。">阻止屏幕关闭</CheckBox>
                                     </StackPanel>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1">
-                                    <TextBlock Text="登录模式" FontSize="14" FontWeight="Bold" Margin="0,0,0,8"/>
+                                    <TextBlock Text="连接优先顺序" FontSize="14" FontWeight="Bold" Margin="0,0,0,8"/>
                                     <StackPanel>
-                                        <RadioButton Name="ppp" GroupName="Mode" Margin="0,3">宽带</RadioButton>
-                                        <RadioButton Name="cpu" GroupName="Mode" Margin="0,3">CPU</RadioButton>
-                                        <RadioButton Name="auto" GroupName="Mode" Margin="0,3">自动</RadioButton>
+                                        <RadioButton Name="campusFirst" GroupName="NetworkPriority" Margin="0,3" Checked="Priority_Changed">校园网优先</RadioButton>
+                                        <RadioButton Name="dormitoryFirst" GroupName="NetworkPriority" Margin="0,3" Checked="Priority_Changed">宿舍网优先</RadioButton>
                                     </StackPanel>
                                 </StackPanel>
                             </Grid>
@@ -134,104 +139,51 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="定时时长:" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <TextBox Grid.Column="1" Name="loginTime" FontSize="14" Padding="3" 
+                                         ToolTip="默认 10 秒；每轮检测及必要认证结束后，再等待此间隔。"
+                                         TextChanged="Interval_TextChanged"
                                          PreviewTextInput="Code_PreviewTextInput" InputMethod.IsInputMethodEnabled="False"/>
                                 <TextBlock Grid.Column="2" Text="秒" FontSize="14" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             </Grid>
                             
-                            <TextBlock Grid.Row="2" TextWrapping="Wrap" FontSize="12" Foreground="#666" Margin="0,0,0,15">
-                                在宿舍登录模式请选择宽带，在宿舍外请选择CPU。连接出现问题可尝试自动模式。
+                            <TextBlock Grid.Row="2" x:Name="IntervalValidationText" TextWrapping="Wrap" FontSize="12" Foreground="OrangeRed" Margin="0,0,0,8"/>
+                            <TextBlock Grid.Row="3" TextWrapping="Wrap" FontSize="12" Foreground="#666" Margin="0,0,0,15">
+                                先尝试优先的网络，未成功时再尝试另一个；成功或已在线即停止。宿舍网连接需要选择运营商。
                             </TextBlock>
                         </Grid>
                     </Grid>
                     
-                    <TextBlock Text="检测到 TUN 模式时自动暂停校园网登录，关闭后恢复检测。" TextWrapping="Wrap" Foreground="#666" Margin="0,8,0,0"/>
-                    <Button Content="保存网络设置" Style="{StaticResource ModuleSaveButton}" Click="SaveNetwork_Click"/>
+                    <StackPanel Margin="0,8,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="状态不明重连次数：" VerticalAlignment="Center"/>
+                            <TextBox x:Name="UnknownReconnectCount" Width="55" Padding="3" TextChanged="UnknownReconnectCount_TextChanged"/>
+                        </StackPanel>
+                        <TextBlock x:Name="UnknownReconnectValidationText" Foreground="OrangeRed" TextWrapping="Wrap"/>
+                        <TextBlock Text="默认 3 次，允许 0～100，0 为关闭；修改后立即保存。启动、手动与自动登录各轮开始统一至少间隔 30 秒，冷却中不消耗重连次数。状态不明重连成功或已在线即停止；达到上限后继续探测，外网恢复正常后重置次数。重启程序会重新计数。" TextWrapping="Wrap" FontSize="12" Foreground="#666" Margin="0,4,0,0"/>
+                    </StackPanel>
+                    <TextBlock Text="允许与 TUN 共存；已知校园认证跳转按原策略重连，状态不明时按上述次数有限尝试。每轮仍需先确认认证 IP，请确保校园认证地址的路由可达。" TextWrapping="Wrap" Foreground="#666" Margin="0,8,0,0"/>
 
-                    <!-- 电费设置面板 -->
-                    <controls:ElectricitySettingsControl x:Name="ElectricitySettings" Margin="0,40,0,0"/>
-                    <Button Content="保存电费设置" Style="{StaticResource ModuleSaveButton}" Click="SaveElectricity_Click"/>
-                    
-                    <!-- 邮件设置面板 -->
-                    <controls:EmailSettingsControl x:Name="EmailSettings" Margin="0,40,0,0"/>
-                    <Button Content="保存邮件设置" Style="{StaticResource ModuleSaveButton}" Click="SaveEmail_Click"/>
-                    
-                    <!-- 背景设置面板 -->
-                    <controls:BackgroundSettingsControl x:Name="BackgroundSettings" Margin="0,40,0,0"/>
-                    <Button Content="保存背景与图标" Style="{StaticResource ModuleSaveButton}" Click="SaveBackground_Click"/>
-                    
-                    <!-- 代理设置面板 -->
-                    <Grid x:Name="ProxyPanel" Margin="0,40,0,0">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        
-                        <TextBlock Grid.Row="0" Text="代理设置" FontSize="20" FontWeight="Bold" Margin="0,0,0,15"/>
-                        
-                        <CheckBox Grid.Row="1" Name="ProxyEnabledCheckBox" Content="启用更新代理" FontSize="14" Margin="0,0,0,15"
-                                  Checked="ProxyEnabledCheckBox_Changed" Unchecked="ProxyEnabledCheckBox_Changed"/>
-                        
-                        <Border Grid.Row="2" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="6" Padding="15"
-                                Background="#CCFFFFFF" x:Name="ProxySettingsBorder">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="100"/>
-                                    <ColumnDefinition Width="250"/>
-                                </Grid.ColumnDefinitions>
-                                
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="代理类型:" FontSize="14" VerticalAlignment="Center" Margin="0,5"/>
-                                <ComboBox Grid.Row="0" Grid.Column="1" Name="ProxyTypeComboBox" FontSize="14" Padding="3" Margin="0,5">
-                                    <ComboBoxItem Content="HTTP" Tag="HTTP"/>
-                                    <ComboBoxItem Content="SOCKS5" Tag="SOCKS5"/>
-                                    <ComboBoxItem Content="SOCKS4" Tag="SOCKS4"/>
-                                </ComboBox>
-                                
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="服务器:" FontSize="14" VerticalAlignment="Center" Margin="0,5"/>
-                                <TextBox Grid.Row="1" Grid.Column="1" Name="ProxyHostTextBox" FontSize="14" Padding="3" Margin="0,5"
-                                         ToolTip="代理服务器地址，如 127.0.0.1"/>
-                                
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="端口:" FontSize="14" VerticalAlignment="Center" Margin="0,5"/>
-                                <TextBox Grid.Row="2" Grid.Column="1" Name="ProxyPortTextBox" FontSize="14" Padding="3" Margin="0,5"
-                                         PreviewTextInput="Code_PreviewTextInput" InputMethod.IsInputMethodEnabled="False"
-                                         ToolTip="代理服务器端口，如 8080 或 1080"/>
-                                
-                                <TextBlock Grid.Row="3" Grid.Column="0" Text="用户名:" FontSize="14" VerticalAlignment="Center" Margin="0,5"/>
-                                <TextBox Grid.Row="3" Grid.Column="1" Name="ProxyUsernameTextBox" FontSize="14" Padding="3" Margin="0,5"
-                                         ToolTip="留空表示不认证"/>
-                                
-                                <TextBlock Grid.Row="4" Grid.Column="0" Text="密码:" FontSize="14" VerticalAlignment="Center" Margin="0,5"/>
-                                <PasswordBox Grid.Row="4" Grid.Column="1" Name="ProxyPasswordBox" FontSize="14" Padding="3" Margin="0,5"
-                                             ToolTip="留空表示不认证"/>
-                                
-                                <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" TextWrapping="Wrap" FontSize="12" Foreground="#666" Margin="0,10,0,0">
-                                    HTTP 代理直接支持。SOCKS 代理需系统支持或配合外部工具使用。
-                                </TextBlock>
-                            </Grid>
-                        </Border>
-                    </Grid>
-                    
-                    <Button Content="保存代理设置" Style="{StaticResource ModuleSaveButton}" Click="SaveProxy_Click"/>
+                    <StackPanel x:Name="LoggingPanel" Margin="0,12,0,0">
+                        <TextBlock Text="运行日志" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="单文件上限：" VerticalAlignment="Center"/>
+                            <TextBox x:Name="LogFileSize" Width="60" Padding="3" TextChanged="LogFileSize_TextChanged"/>
+                            <TextBlock Text=" MB（1～100）" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock x:Name="LogSizeValidationText" Foreground="OrangeRed" TextWrapping="Wrap"/>
+                        <TextBlock Text="修改后立即保存。新版运行日志保留最近 5 个文件，超限后覆盖最旧文件；旧版历史日志保留。" TextWrapping="Wrap" FontSize="12" Foreground="#666" Margin="0,4,0,0"/>
+                    </StackPanel>
 
                     <!-- 关于面板 -->
-                    <Grid x:Name="AboutPanel" Margin="0,40,0,0">
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,40">
-                            <TextBlock Text="CPU_NET" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <Grid x:Name="AboutPanel" Margin="0,20,0,0">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,16">
+                            <TextBlock Text="CPU_NET_Lite" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                             <TextBlock Text="校园网自动登录工具" FontSize="14" Foreground="Gray" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                             <TextBlock x:Name="VersionTextBlock" FontSize="13" Foreground="#666666" HorizontalAlignment="Center" Margin="0,0,0,20"/>
-                            <TextBlock Text="Developed BY 二阶堂真红" FontSize="14" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            <TextBlock Text="开发者：Halfaustus" FontSize="14" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                            <TextBlock Text="基于 SoraNoNeko/cpu_net" FontSize="12" Foreground="Gray" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                             <TextBlock HorizontalAlignment="Center" Margin="0,0,0,20">
-                                <Hyperlink Click="Hyperlink_Click" FontSize="14">代码发布页</Hyperlink>
+                                <Hyperlink Click="Hyperlink_Click" FontSize="14">Halfaustus/cpu_net_lite</Hyperlink>
                             </TextBlock>
-                            <Button Content="检查更新" Width="120" Height="36" FontSize="14" Click="CheckUpdateButton_Click"/>
                         </StackPanel>
                     </Grid>
                 </StackPanel>

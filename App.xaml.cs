@@ -36,22 +36,16 @@ namespace cpu_net
         protected override void OnStartup(StartupEventArgs e)
         {
             // 防止多实例启动：即使注册表中有多个启动项，也只会运行一个实例
-            const string mutexName = "cpu_net_SingleInstance_Mutex";
+            string mutexName = Program.IsPreview ? "cpu_net_Preview_SingleInstance_Mutex" : "cpu_net_SingleInstance_Mutex";
             _mutex = new Mutex(true, mutexName, out bool createdNew);
 
             if (!createdNew)
             {
                 // 已有实例在运行，激活已有窗口后退出当前实例
-                ActivateExistingInstance();
+                if (!Program.IsPreview) ActivateExistingInstance();
                 Shutdown();
                 return;
             }
-
-            // 初始化自动更新服务（必须在任何 UI 操作之前）
-            UpdateService.Initialize();
-
-            // 覆盖安装后检测并修复指向旧路径的开机启动项
-            try { new AutoStart().FixStaleAutoStartEntry(); } catch { /* 忽略 */ }
 
             RegisterEvents();
             base.OnStartup(e);
@@ -63,21 +57,17 @@ namespace cpu_net
             sysTrayMenu.Items.Add(new MenuItem { Header = "显示窗口", Command = notifyVm.ShowWindowCommand });
             sysTrayMenu.Items.Add(new MenuItem { Header = "关闭窗口", Command = notifyVm.HideWindowCommand });
             sysTrayMenu.Items.Add(new Separator());
-            sysTrayMenu.Items.Add(new MenuItem { Header = "检查更新", Command = notifyVm.CheckUpdateCommand });
-            sysTrayMenu.Items.Add(new Separator());
             sysTrayMenu.Items.Add(new MenuItem { Header = "退出", Command = notifyVm.ExitApplicationCommand });
 
             TaskbarIcon = new TaskbarIcon
             {
-                ToolTipText = "CPU_NET",
+                ToolTipText = Program.IsPreview ? "CPU_NET_Lite（预览模式）" : "CPU_NET_Lite",
                 IconSource = new BitmapImage(new Uri("pack://application:,,,/assets/shinnku.ico")),
                 DataContext = notifyVm,
                 ContextMenu = sysTrayMenu,
                 DoubleClickCommand = notifyVm.ShowWindowCommand
             };
 
-            // 后台静默检查更新（不阻塞启动）
-            _ = UpdateService.CheckForUpdatesSilentAsync();
         }
 
         /// <summary>

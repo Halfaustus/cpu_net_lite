@@ -1,9 +1,9 @@
 ﻿using cpu_net.Model;
 using System;
-using System.Net.Http;
-using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace cpu_net.Views.Pages
@@ -14,21 +14,6 @@ namespace cpu_net.Views.Pages
     public partial class HomePage : Page
     {
         private readonly SettingModel _settingData = new SettingModel();
-        private readonly HttpClient _httpClient;
-
-        private readonly string _defaultNoticeText = @"欢迎使用本程序，
-本程序旨在帮助药大学生自动登录校园网，免受断网困扰
-本本答疑群：939789212
-使用本程序前，需要绑定运营商账号，
-绑定方法点击下方按钮可以显示
-本程序所有数据均存放在本地，
-如有使用困难请带着日志截图去本本群询问
-注意事项：
-如果需要自动登录功能，请勾选定时登录
-其功能为固定间隔检测联网状态
-设置中的自动登录为启动时自动登录
-需要电脑不关机并连宿舍网
-尝试使用CPU模式强制连接CPU时可能会卡住，是正常现象";
 
         public MainWindow ParentWindow { get; set; }
 
@@ -42,40 +27,6 @@ namespace cpu_net.Views.Pages
                     this.DataContext = ParentWindow.DataContext;
                 }
             };
-
-            _httpClient = new HttpClient
-            {
-                Timeout = TimeSpan.FromSeconds(5)
-            };
-
-            Loaded += HomePage_Loaded;
-        }
-
-        private async void HomePage_Loaded(object sender, RoutedEventArgs e)
-        {
-            await LoadNoticeText();
-        }
-
-        private async Task LoadNoticeText()
-        {
-            textNotice.Text = _defaultNoticeText;
-            sv1.ScrollToEnd();
-
-            try
-            {
-                string noticeUrl = "http://10.3.4.106/notice.txt";
-                string noticeContent = await _httpClient.GetStringAsync(noticeUrl);
-
-                if (!string.IsNullOrWhiteSpace(noticeContent))
-                {
-                    textNotice.Text = noticeContent;
-                    sv1.ScrollToEnd();
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"加载公告失败: {ex.Message}");
-            }
         }
 
         private void LoginButton_Click(object sender, RoutedEventArgs e)
@@ -107,6 +58,33 @@ namespace cpu_net.Views.Pages
         private void textLog_TextChanged(object sender, TextChangedEventArgs e)
         {
             sv1?.ScrollToEnd();
+        }
+
+        private void Log_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.C || Keyboard.Modifiers != ModifierKeys.Control) return;
+            CopyLog(textLog.SelectionLength > 0 ? textLog.SelectedText : textLog.Text);
+            e.Handled = true;
+        }
+
+        private void CopySelectedLog_Click(object sender, RoutedEventArgs e) => CopyLog(textLog.SelectedText);
+
+        private void CopyAllLog_Click(object sender, RoutedEventArgs e) => CopyLog(textLog.Text);
+
+        private void SelectAllLog_Click(object sender, RoutedEventArgs e)
+        {
+            textLog.Focus();
+            textLog.SelectAll();
+        }
+
+        private static void CopyLog(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            try { Clipboard.SetText(text); }
+            catch (ExternalException)
+            {
+                MessageBox.Show("剪贴板暂时被其他程序占用，请稍后再复制。", "复制日志");
+            }
         }
     }
 }

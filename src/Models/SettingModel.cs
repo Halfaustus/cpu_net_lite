@@ -1,11 +1,11 @@
-using Prism.Mvvm;
+using cpu_net.ViewModel.Base;
 using System;
 using System.IO;
 using cpu_net.Services;
 
 namespace cpu_net.Model
 {
-    public class SettingModel : BindableBase
+    public class SettingModel : ViewModelBase
     {
         private const string DefaultTestUrl = "http://www.msftconnecttest.com/connecttest.txt";
         private const string DefaultTestCode = "Microsoft Connect Test";
@@ -17,17 +17,23 @@ namespace cpu_net.Model
         private string _carrier = string.Empty;
         private int _key;
         private int _mode;
+        private int _preferredNetwork;
         private bool? _isAutoRun;
         private bool? _isAutoLogin;
         private bool? _isAutoMin;
+        private bool? _preventSystemSleep;
+        private bool? _preventDisplaySleep;
         private bool? _isSetLogin;
         private int? _loginTime;
+        private int? _logFileSizeMb;
+        private int? _unknownReconnectAttempts;
         private bool? _networkLoginEnabled;
         private bool? _testMode;
         private string? _testUrl;
         private string? _testCode;
 
-        // 电费查询设置
+        // 以下已移除模块的字段仅作旧 config.yaml 的被动兼容数据；不再绑定界面或启动服务。
+        // 电费查询历史设置
         private bool? _electricityEnabled;
         private string? _electricityStudentNo;
         private decimal? _electricityThreshold;
@@ -39,7 +45,7 @@ namespace cpu_net.Model
         // 提醒方式: 0=系统通知, 1=邮件通知, 2=两者
         private int? _notifyType;
 
-        // 邮件提醒设置
+        // 邮件提醒历史设置
         private bool? _emailEnabled;
         private string? _emailSmtpServer;
         private int? _emailSmtpPort;
@@ -51,13 +57,13 @@ namespace cpu_net.Model
         private string? _emailNotBoundSubject;
         private string? _emailNotBoundBody;
 
-        // 背景与图标设置
+        // 背景与图标历史设置
         private string? _backgroundImagePath;
         private double? _backgroundOpacity;
         private string? _customIconPath;
         private double? _textBoxOpacity;
 
-        // 更新代理设置
+        // 更新代理历史设置：仅保留兼容数据，不再配置进程代理或触发更新。
         private bool? _updateProxyEnabled;
         private string? _updateProxyType; // HTTP, SOCKS5, SOCKS4
         private string? _updateProxyHost;
@@ -91,10 +97,18 @@ namespace cpu_net.Model
             set => SetProperty(ref _key, value);
         }
 
+        // 历史模式字段只保留兼容数据，实际连接按 PreferredNetwork 排序。
         public int Mode
         {
             get => _mode;
             set => SetProperty(ref _mode, value);
+        }
+
+        // 0 = 校园网优先，1 = 宿舍网优先。
+        public int PreferredNetwork
+        {
+            get => _preferredNetwork;
+            set => SetProperty(ref _preferredNetwork, value);
         }
 
         public bool IsAutoRun
@@ -115,6 +129,19 @@ namespace cpu_net.Model
             set => SetProperty(ref _isAutoMin, value);
         }
 
+        // 缺少字段时延续旧版保持系统唤醒的行为。
+        public bool PreventSystemSleep
+        {
+            get => _preventSystemSleep ?? true;
+            set => SetProperty(ref _preventSystemSleep, value);
+        }
+
+        public bool PreventDisplaySleep
+        {
+            get => _preventDisplaySleep ?? false;
+            set => SetProperty(ref _preventDisplaySleep, value);
+        }
+
         public bool IsSetLogin
         {
             get => _isSetLogin ?? false;
@@ -129,7 +156,7 @@ namespace cpu_net.Model
 
         public int LoginTime
         {
-            get => _loginTime ?? 5;
+            get => _loginTime ?? 10;
             set => SetProperty(ref _loginTime, value);
         }
 
@@ -137,6 +164,18 @@ namespace cpu_net.Model
         {
             get => _testMode ?? false;
             set => SetProperty(ref _testMode, value);
+        }
+
+        public int LogFileSizeMb
+        {
+            get => _logFileSizeMb ?? 10;
+            set => SetProperty(ref _logFileSizeMb, value);
+        }
+
+        public int UnknownReconnectAttempts
+        {
+            get => _unknownReconnectAttempts ?? 3;
+            set => SetProperty(ref _unknownReconnectAttempts, value);
         }
 
         public string TestUrl
@@ -340,3 +379,4 @@ namespace cpu_net.Model
         public void Save() => new SettingsStore(_settingDataPath).Save(this);
     }
 }
+

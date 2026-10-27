@@ -53,14 +53,6 @@ namespace cpu_net.ViewModel
             }
         };
 
-        public ICommand CheckUpdateCommand => new DelegateCommand
-        {
-            CommandAction = () =>
-            {
-                _ = UpdateService.CheckAndPromptUpdateAsync(Application.Current?.MainWindow);
-            }
-        };
-
         public class DelegateCommand : ICommand
         {
             public Action CommandAction { get; set; }

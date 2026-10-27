@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Net;
 using System.Text;
@@ -17,18 +17,18 @@ namespace cpu_net.Services
         /// <summary>
         /// 同步 HTTP GET 请求
         /// </summary>
-        public static string HttpGetRequest(string url, Action<string>? diagnostic = null)
+        public static string HttpGetRequest(string url, Action<string>? diagnostic = null, string operationName = "认证")
         {
             var endpoint = new Uri(url).GetLeftPart(UriPartial.Path);
             var timer = Stopwatch.StartNew();
-            diagnostic?.Invoke($"认证请求：{endpoint}；直连；超时 5000 ms");
+            diagnostic?.Invoke($"{operationName}请求：{endpoint}；直连；超时 5000 ms");
             try
             {
                 using var getResponse = CreateGetHttpWebRequest(url).GetResponse() as HttpWebResponse;
                 if (getResponse != null && (int)getResponse.StatusCode >= 300)
                     throw new InvalidOperationException($"{endpoint}；直连；HTTP {(int)getResponse.StatusCode}；认证接口返回重定向；耗时 {timer.ElapsedMilliseconds} ms");
-                string content = GetHttpResponse(getResponse, "GET");
-                diagnostic?.Invoke($"认证响应：{endpoint}；HTTP {(int?)getResponse?.StatusCode}；耗时 {timer.ElapsedMilliseconds} ms；正文长度 {content.Length}");
+                string content = GetHttpResponse(getResponse);
+                diagnostic?.Invoke($"{operationName}响应：{endpoint}；HTTP {(int?)getResponse?.StatusCode}；耗时 {timer.ElapsedMilliseconds} ms；正文长度 {content.Length}");
                 return content;
             }
             catch (WebException ex)
@@ -81,22 +81,6 @@ namespace cpu_net.Services
             return text.Substring(1, text.Length - 2).Trim();
         }
 
-        /// <summary>
-        /// 同步 HTTP POST 请求
-        /// </summary>
-        public static string HttpPostRequest(string url, string postJsonData)
-        {
-            try
-            {
-                using var postResponse = CreatePostHttpWebRequest(url, postJsonData).GetResponse() as HttpWebResponse;
-                return GetHttpResponse(postResponse, "POST");
-            }
-            catch (Exception ex)
-            {
-                return ex.Message;
-            }
-        }
-
         private static HttpWebRequest CreateGetHttpWebRequest(string url)
         {
             var getRequest = WebRequest.Create(url) as HttpWebRequest;
@@ -110,45 +94,16 @@ namespace cpu_net.Services
             return getRequest;
         }
 
-        private static HttpWebRequest CreatePostHttpWebRequest(string url, string postData)
-        {
-            var postRequest = WebRequest.Create(url) as HttpWebRequest;
-            postRequest!.KeepAlive = false;
-            postRequest.Timeout = 5000;
-            postRequest.Method = "POST";
-            postRequest.ContentType = "application/x-www-form-urlencoded";
-            postRequest.ContentLength = postData.Length;
-            postRequest.AllowWriteStreamBuffering = false;
-
-            using (var writer = new StreamWriter(postRequest.GetRequestStream(), Encoding.ASCII))
-            {
-                writer.Write(postData);
-                writer.Flush();
-            }
-
-            return postRequest;
-        }
-
-        private static string GetHttpResponse(HttpWebResponse? response, string requestType)
+        private static string GetHttpResponse(HttpWebResponse? response)
         {
             if (response == null)
             {
                 return string.Empty;
             }
 
-            string encoding = "UTF-8";
-
-            if (string.Equals(requestType, "POST", StringComparison.OrdinalIgnoreCase))
-            {
-                encoding = response.ContentEncoding;
-                if (string.IsNullOrEmpty(encoding))
-                {
-                    encoding = "UTF-8";
-                }
-            }
-
-            using var reader = new StreamReader(response.GetResponseStream()!, Encoding.GetEncoding(encoding));
+            using var reader = new StreamReader(response.GetResponseStream()!, Encoding.UTF8);
             return reader.ReadToEnd();
         }
     }
 }
+
