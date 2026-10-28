@@ -98,7 +98,7 @@ namespace cpu_net
 
         private async void LoginAtStartup()
         {
-            await Task.Run(() => _vm.LoginOnline());
+            await Task.Run(() => _vm.LoginOnline(isStartupLogin: true));
             ChangePage("home");
         }
 

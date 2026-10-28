@@ -378,3 +378,6 @@ obj/
 Properties/
 .vs/
 *.bin
+
+# Local probe response diagnostics
+**/Diagnostics/

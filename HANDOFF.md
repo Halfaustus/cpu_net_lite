@@ -1,7 +1,7 @@
-# V1.0 交接
+# V1.1 本地归档交接
 
-用户已确认当前功能正常，授权整理为1.0.0并提交/推送到Halfaustus/cpu_net_lite。唯一主工程cpu_net.csproj，运行分发目录artifacts/V1.0。当前说明以README.md及docs/DESIGN.md为准，执行记录见docs/RUN-LOG.md。
+2026-10-28用户授权保存当前源码至本地Git作为V1.1。主工程cpu_net.csproj，版本1.1.0；master分支，本地v1.1标签，不推送、不发布。包含手动登录冷却修正、增强模式、完整本地诊断、设置说明精简及HTTP200已知宿舍门户识别。已有未提交成果一并保留归档。
 
-原安装工程、旧发布配置、阶段产物和原配置日志已保留在.local-archive/pre-v1.0（不提交）。OpenWrt相关文件保持原样，不提交。运行数据不进入分发或Git，旧启动项不自动修改。
+独立编译目录artifacts/V1.1；旧V1.0及enhanced-mode-ui等运行目录不覆盖，真实配置不迁移。配置、日志、Diagnostics、构建产物、归档及OpenWrt内容不纳入提交。详细设计及实际命令见docs/DESIGN.md、docs/RUN-LOG.md。
 
-CLI、安装器及其他后续开发继续冻结。用户已确认的是整理前功能；整理后AI仅进行编译/发布检查，未自动启动或认证。Git提交/推送结果以实际执行及交付信息为准。
+AI仅Release编译；新增页面识别、诊断及重连行为待人工验收，本地归档不代表功能验收。CLI、安装器及其余计划继续冻结。

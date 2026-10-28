@@ -25,46 +25,84 @@ namespace cpu_net.Services
         }) { Timeout = TimeSpan.FromSeconds(5) };
 
         public static async Task<InternetProbeResult> ProbeInternetAsync(
-            string url, string expectedBody, Action<string> report, CancellationToken cancellationToken = default)
+            string url, string expectedBody, Action<string> report, CancellationToken cancellationToken = default,
+            Action<string, string, string>? diagnostic = null)
         {
+            var started = DateTimeOffset.Now;
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            Uri? probeUri = null;
+            HttpResponseMessage? response = null;
+            string? body = null;
+            string locationText = "无";
+            string mediaType = "未收到响应";
+            void Report(string reason, string? failure = null)
+            {
+                string metadata = $"检测地址={ProbeDiagnostics.Address(probeUri)}\nHTTP={(response == null ? "未收到响应" : ((int)response.StatusCode).ToString())}\nContent-Type={mediaType}\nLocation={locationText}\n正文长度={(body == null ? "未知（未取得完整正文）" : body.Length + " 字符")}\n原因={reason}\n异常={failure ?? "无"}";
+                string stable = System.Text.Json.JsonSerializer.Serialize(new { metadata, body });
+                string key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(stable)));
+                string detail = $"检测时间={started:yyyy-MM-dd HH:mm:ss.fff zzz}\n{metadata}\n耗时={timer.ElapsedMilliseconds} ms\n保留策略=最近{ProbeDiagnostics.RetainedFileCount}份；超出删除最旧文件\n完整响应正文（未脱敏、不截断）：\n{body ?? "[未取得正文]"}";
+                if (diagnostic != null) diagnostic(key, reason, detail);
+                else report(ProbeDiagnostics.Save(reason, detail));
+            }
             try
             {
-                if (!Uri.TryCreate(url, UriKind.Absolute, out var probeUri) ||
+                if (!Uri.TryCreate(url, UriKind.Absolute, out probeUri) ||
                     (probeUri.Scheme != Uri.UriSchemeHttp && probeUri.Scheme != Uri.UriSchemeHttps))
                 {
-                    report("外网状态无法确定：检测地址格式无效；重连由状态不明策略决定。");
+                    Report("检测地址格式无效，未发送请求");
                     return new InternetProbeResult(InternetProbeState.Unknown);
                 }
-
-                using var response = await ProbeClient.GetAsync(probeUri, cancellationToken);
-                if (response.IsSuccessStatusCode &&
-                    (await response.Content.ReadAsStringAsync(cancellationToken)).Trim() == expectedBody)
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(TimeSpan.FromSeconds(5));
+                response = await ProbeClient.GetAsync(probeUri, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+                mediaType = response.Content.Headers.ContentType?.ToString() ?? "未提供";
+                var location = response.Headers.Location;
+                Uri? destination = null;
+                if (location != null) Uri.TryCreate(probeUri, location, out destination);
+                if (response.Headers.TryGetValues("Location", out var locations)) locationText = string.Join("\n", locations);
+                string? bodyFailure = null;
+                try { body = await response.Content.ReadAsStringAsync(timeout.Token); }
+                catch (Exception ex) when (!response.IsSuccessStatusCode && !cancellationToken.IsCancellationRequested)
+                {
+                    // 非成功响应原先只依赖状态码和Location；诊断读取失败不改变门户判定。
+                    bodyFailure = ProbeDiagnostics.Failure(ex);
+                }
+                if (response.IsSuccessStatusCode && body!.Trim() == expectedBody)
                     return new InternetProbeResult(InternetProbeState.Online);
 
                 int status = (int)response.StatusCode;
-                var location = response.Headers.Location;
-                if ((status == 301 || status == 302 || status == 303 || status == 307 || status == 308) &&
-                    location != null)
+                if (status == 200 && body != null &&
+                    string.Equals(response.Content.Headers.ContentType?.MediaType, "text/html", StringComparison.OrdinalIgnoreCase) &&
+                    PortalPageRecognizer.IsKnownDormitoryPage(body))
                 {
-                    var destination = location.IsAbsoluteUri ? location : new Uri(probeUri, location);
-                    if (destination.Scheme == Uri.UriSchemeHttp || destination.Scheme == Uri.UriSchemeHttps)
+                    cancellationToken.ThrowIfCancellationRequested();
+                    Report("检测到已知宿舍网认证页面（HTTP 200 正文跳转）");
+                    return new InternetProbeResult(InternetProbeState.CampusPortal, 0);
+                }
+                if ((status == 301 || status == 302 || status == 303 || status == 307 || status == 308) &&
+                    destination != null && (destination.Scheme == Uri.UriSchemeHttp || destination.Scheme == Uri.UriSchemeHttps))
+                {
+                    if (destination.Host == new Uri(NetworkConstants.BroadbandDrComUrl).Host)
                     {
-                        if (destination.Host == new Uri(NetworkConstants.BroadbandDrComUrl).Host)
-                            return new InternetProbeResult(InternetProbeState.CampusPortal, 0);
-                        if (destination.Host == new Uri(NetworkConstants.CpuDrComUrl).Host)
-                            return new InternetProbeResult(InternetProbeState.CampusPortal, 1);
+                        Report("已知宿舍网认证跳转", bodyFailure);
+                        return new InternetProbeResult(InternetProbeState.CampusPortal, 0);
+                    }
+                    if (destination.Host == new Uri(NetworkConstants.CpuDrComUrl).Host)
+                    {
+                        Report("已知校园网认证跳转", bodyFailure);
+                        return new InternetProbeResult(InternetProbeState.CampusPortal, 1);
                     }
                 }
-                report($"外网状态无法确定：HTTP {status}，正文或跳转不是已知联网/校园认证结果；重连由状态不明策略决定。");
+                Report($"HTTP {status}，正文或跳转不符合联网判定", bodyFailure);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
-                report($"外网状态无法确定：{NetworkService.DescribeFailure(ex)}；可能涉及 DNS、检测站点或 TUN 路由，重连由状态不明策略决定。");
+                Report(ProbeDiagnostics.BriefFailure(ex), ProbeDiagnostics.Failure(ex));
             }
+            finally { response?.Dispose(); }
             return new InternetProbeResult(InternetProbeState.Unknown);
         }
-
         public static IEnumerable<CampusLoginTarget> ResolveTargets(int preferredNetwork, Action<string> report,
             int? detectedPortalMode = null, bool includeDormitory = true, CancellationToken cancellationToken = default)
         {

@@ -23,13 +23,11 @@ namespace cpu_net.ViewModel
         private int _restartPending;
         private bool _stopped;
         private string? _lastProbeMessage;
+        private string? _lastProbeDisplay;
         private long _lastProbeReport;
         private int _repeatedProbeCount;
-        private int _unknownAttempts;
         private long _lastLoginStart = -30000;
         private const int LoginCooldownMilliseconds = 30000;
-        private bool _unknownRetryComplete;
-        private bool _unknownLimitReported;
         private readonly DispatcherTimer _logRefreshTimer;
         private int _logDirty;
         private int _checkingNetwork;
@@ -148,20 +146,27 @@ namespace cpu_net.ViewModel
         }
 
         private void ReportProbe(string message)
+            => ReportProbeCore(message, () => message);
+
+        private void ReportProbeDiagnostic(string key, string reason, string detail)
+            => ReportProbeCore(key, () => ProbeDiagnostics.Save(reason, detail));
+
+        private void ReportProbeCore(string key, Func<string> createMessage)
         {
             long now = Environment.TickCount64;
-            if (_lastProbeMessage == message)
+            if (_lastProbeMessage == key)
             {
                 _repeatedProbeCount++;
                 if (now - _lastProbeReport < 300000) return;
-                Info($"{message}（过去 5 分钟重复 {_repeatedProbeCount} 次）");
+                Info($"{_lastProbeDisplay}（过去 5 分钟重复 {_repeatedProbeCount} 次）");
             }
             else
             {
                 if (_repeatedProbeCount > 0) Info($"上一探测状态额外重复 {_repeatedProbeCount} 次，现已变化。");
-                Info(message);
+                _lastProbeDisplay = createMessage();
+                Info(_lastProbeDisplay);
             }
-            _lastProbeMessage = message;
+            _lastProbeMessage = key;
             _lastProbeReport = now;
             _repeatedProbeCount = 0;
         }
@@ -173,35 +178,20 @@ namespace cpu_net.ViewModel
             if (!setting.NetworkLoginEnabled || !setting.IsSetLogin ||
                 string.IsNullOrWhiteSpace(setting.Username) || string.IsNullOrEmpty(setting.Password)) return;
 
-            var probe = await CampusConnectionService.ProbeInternetAsync(setting.TestUrl, setting.TestCode, ReportProbe, token);
+            var probe = await CampusConnectionService.ProbeInternetAsync(setting.TestUrl, setting.TestCode, ReportProbe, token,
+                ReportProbeDiagnostic);
             token.ThrowIfCancellationRequested();
             if (probe.State == InternetProbeState.Online)
             {
-                _unknownAttempts = 0;
-                _unknownRetryComplete = false;
-                _unknownLimitReported = false;
-                if (_lastProbeMessage != null) ReportProbe("外网探测已恢复正常。");
+                if (_lastProbeMessage != null) ReportProbe($"外网探测已恢复正常，恢复时间={DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff zzz}。");
                 _lastProbeMessage = null;
             }
             if (probe.State == InternetProbeState.CampusPortal && probe.PortalMode.HasValue)
             {
-                ReportProbe("检测到已知校园认证页面跳转，开始确认认证 IP 并尝试登录。");
                 await Task.Run(() => LoginOnline(probe.PortalMode, token), token);
             }
-            else if (probe.State == InternetProbeState.Unknown && !_unknownRetryComplete)
+            else if (probe.State == InternetProbeState.Unknown && setting.EnhancedMode)
             {
-                int limit = Math.Clamp(setting.UnknownReconnectAttempts, 0, 100);
-                if (_unknownAttempts >= limit)
-                {
-                    if (!_unknownLimitReported)
-                    {
-                        Info(limit == 0 ? "状态不明时的自动重连已关闭，继续探测。"
-                            : $"状态不明重连已达到上限（{limit} 轮），继续探测，外网恢复正常后重置次数。");
-                        _unknownLimitReported = true;
-                    }
-                    return;
-                }
-                _unknownLimitReported = false;
                 token.ThrowIfCancellationRequested();
                 await Task.Run(() => LoginOnline(null, token, unknownStateRetry: true), token);
             }
@@ -263,21 +253,25 @@ namespace cpu_net.ViewModel
         #endregion
 
         public int LoginOnline(int? detectedPortalMode = null, CancellationToken cancellationToken = default,
-            bool unknownStateRetry = false)
+            bool unknownStateRetry = false, bool isStartupLogin = false)
         {
             if (Program.IsPreview)
             {
                 Info("预览模式不执行校园网认证。");
                 return 0;
             }
-            if (Interlocked.Exchange(ref _loggingIn, 1) != 0) return 0;
+            if (Interlocked.Exchange(ref _loggingIn, 1) != 0)
+            {
+                if (!detectedPortalMode.HasValue && !unknownStateRetry && !isStartupLogin)
+                    Info("当前登录流程尚未完成，请等待结束后再手动登录。");
+                return 0;
+            }
             try
             {
-                int result = LoginCore(detectedPortalMode, cancellationToken, unknownStateRetry);
+                int result = LoginCore(detectedPortalMode, cancellationToken, unknownStateRetry, isStartupLogin);
                 if (unknownStateRetry && (result == 1 || result == 2))
                 {
-                    _unknownRetryComplete = true;
-                    Info("校园认证已成功或已在线，停止本次状态不明期间的重连尝试，继续探测外网。");
+                    Info("校园认证已成功或已在线，本轮结束；继续探测外网，若仍状态不明，增强模式将在冷却结束后继续尝试。");
                 }
                 return result == 2 ? 0 : result;
             }
@@ -290,7 +284,8 @@ namespace cpu_net.ViewModel
             finally { Volatile.Write(ref _loggingIn, 0); }
         }
 
-        private int LoginCore(int? detectedPortalMode, CancellationToken cancellationToken, bool unknownStateRetry)
+        private int LoginCore(int? detectedPortalMode, CancellationToken cancellationToken, bool unknownStateRetry,
+            bool isStartupLogin)
         {
             bool automatic = detectedPortalMode.HasValue || unknownStateRetry;
             cancellationToken.ThrowIfCancellationRequested();
@@ -303,27 +298,25 @@ namespace cpu_net.ViewModel
             var setting = _settingData.Read();
             if (!setting.NetworkLoginEnabled ||
                 (automatic && !setting.IsSetLogin) ||
-                (unknownStateRetry && _unknownAttempts >= Math.Clamp(setting.UnknownReconnectAttempts, 0, 100))) return 0;
+                (unknownStateRetry && !setting.EnhancedMode)) return 0;
             if (string.IsNullOrWhiteSpace(setting.Username) || string.IsNullOrEmpty(setting.Password))
             {
                 Info("请先设置账号和密码，本次未认证。");
                 return 0;
             }
 
-            // 所有入口在同一串行锁内共享轮次开始时间；探测恢复或修改设置不清除冷却。
+            // 各入口更新同一时间戳，但只有自动入口受冷却限制；手动只受正在执行的串行锁限制。
             long now = Environment.TickCount64;
             long remaining = LoginCooldownMilliseconds - (now - _lastLoginStart);
-            if (remaining > 0)
+            if ((automatic || isStartupLogin) && remaining > 0)
             {
-                if (!automatic) Info($"距上一轮登录不足 30 秒，请在 {(remaining + 999) / 1000} 秒后重试。");
                 return 0;
             }
             cancellationToken.ThrowIfCancellationRequested();
             _lastLoginStart = now;
             if (unknownStateRetry)
             {
-                _unknownAttempts++;
-                Info($"外网状态不明，进行第 {_unknownAttempts}/{Math.Clamp(setting.UnknownReconnectAttempts, 0, 100)} 轮有限重连；先确认校园认证 IP。");
+                Info("外网状态不明，增强模式开始本轮重连；先确认校园认证 IP。");
             }
 
             bool hasCarrier = setting.Carrier == "cmcc" || setting.Carrier == "unicom" || setting.Carrier == "telecom";
@@ -336,7 +329,7 @@ namespace cpu_net.ViewModel
                 foundTarget = true;
                 var latest = new SettingsStore().Read(force: true);
                 if (!latest.NetworkLoginEnabled || (automatic && !latest.IsSetLogin) ||
-                    (unknownStateRetry && _unknownAttempts > Math.Clamp(latest.UnknownReconnectAttempts, 0, 100)) ||
+                    (unknownStateRetry && !latest.EnhancedMode) ||
                     latest.PreferredNetwork != setting.PreferredNetwork || latest.Username != setting.Username ||
                     latest.Password != setting.Password || latest.Carrier != setting.Carrier ||
                     (automatic &&

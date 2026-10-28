@@ -27,6 +27,7 @@ namespace cpu_net.Model
         private int? _loginTime;
         private int? _logFileSizeMb;
         private int? _unknownReconnectAttempts;
+        private bool _enhancedMode;
         private bool? _networkLoginEnabled;
         private bool? _testMode;
         private string? _testUrl;
@@ -172,10 +173,17 @@ namespace cpu_net.Model
             set => SetProperty(ref _logFileSizeMb, value);
         }
 
+        // 仅兼容旧配置，不再参与重连决策。
         public int UnknownReconnectAttempts
         {
             get => _unknownReconnectAttempts ?? 3;
             set => SetProperty(ref _unknownReconnectAttempts, value);
+        }
+
+        public bool EnhancedMode
+        {
+            get => _enhancedMode;
+            set => SetProperty(ref _enhancedMode, value);
         }
 
         public string TestUrl

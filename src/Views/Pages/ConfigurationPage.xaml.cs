@@ -111,7 +111,7 @@ namespace cpu_net.Views.Pages
             {
                 apply?.Invoke();
                 if (restartNetwork) (ParentWindow?.DataContext as MainViewModel)?.RestartNetworkTimer();
-                SettingsStatusText.Text = $"{name}已立即保存；下一次相关操作使用新设置。";
+                SettingsStatusText.Text = $"{name}已保存。";
             }
             catch (Exception ex)
             {
@@ -141,6 +141,9 @@ namespace cpu_net.Views.Pages
                     break;
                 case "SetLogin":
                     ApplyImmediateSetting("定时检测", settings => settings.IsSetLogin = enabled, restartNetwork: true);
+                    break;
+                case "EnhancedModeCheckBox":
+                    ApplyImmediateSetting("增强模式", settings => settings.EnhancedMode = enabled, restartNetwork: true);
                     break;
                 case "PreventSleepCheckBox":
                     ApplyImmediateSetting("阻止系统休眠", settings => settings.PreventSystemSleep = enabled,
@@ -189,19 +192,6 @@ namespace cpu_net.Views.Pages
             }
             LogSizeValidationText.Text = string.Empty;
             ApplyImmediateSetting("日志大小上限", settings => settings.LogFileSizeMb = size);
-        }
-
-        private void UnknownReconnectCount_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (_isLoadingSettings) return;
-            if (!int.TryParse(UnknownReconnectCount.Text, out int count) || count < 0 || count > 100)
-            {
-                UnknownReconnectValidationText.Text = "请输入 0～100，当前输入尚未保存。";
-                return;
-            }
-            UnknownReconnectValidationText.Text = string.Empty;
-            ApplyImmediateSetting("状态不明重连次数", settings => settings.UnknownReconnectAttempts = count,
-                restartNetwork: true);
         }
 
         private void MenuListBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -333,7 +323,7 @@ namespace cpu_net.Views.Pages
             secret.Password = hasConfig ? data.Password : string.Empty;
             loginTime.Text = data.LoginTime.ToString();
             LogFileSize.Text = data.LogFileSizeMb.ToString();
-            UnknownReconnectCount.Text = data.UnknownReconnectAttempts.ToString();
+            EnhancedModeCheckBox.IsChecked = data.EnhancedMode;
             AutoRun.IsChecked = hasConfig && data.IsAutoRun;
             AutoLogin.IsChecked = hasConfig && data.IsAutoLogin;
             AutoMin.IsChecked = hasConfig && data.IsAutoMin;

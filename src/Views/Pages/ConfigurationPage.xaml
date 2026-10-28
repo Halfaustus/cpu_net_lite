@@ -92,7 +92,7 @@
                         
                         <StackPanel Grid.Row="3" Margin="0,0,0,15">
                             <Button Content="保存网络配置" Style="{StaticResource ModuleSaveButton}" Margin="0,0,0,8" Click="SaveNetworkConfiguration_Click"/>
-                            <TextBlock x:Name="SettingsStatusText" Text="账号、密码和运营商需点击保存网络配置；下方设置修改后立即保存。" TextWrapping="Wrap" FontSize="12" Foreground="#666"/>
+                            <TextBlock x:Name="SettingsStatusText" TextWrapping="Wrap" FontSize="12" Foreground="#666"/>
                         </StackPanel>
 
                         <!-- 登录模式与选项 -->
@@ -116,10 +116,8 @@
                                         <CheckBox Name="AutoLogin" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed">启动时登录</CheckBox>
                                         <CheckBox Name="AutoMin" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed">启动时收起</CheckBox>
                                         <CheckBox Name="SetLogin" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed">定时检测</CheckBox>
-                                        <CheckBox Name="PreventSleepCheckBox" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed"
-                                                  ToolTip="运行期间阻止系统自动休眠；屏幕关闭由下面的选项独立控制。">阻止系统休眠</CheckBox>
-                                        <CheckBox Name="PreventDisplaySleepCheckBox" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed"
-                                                  ToolTip="运行期间保持屏幕亮起。若还需避免系统自动休眠，请同时勾选阻止系统休眠。">阻止屏幕关闭</CheckBox>
+                                        <CheckBox Name="PreventSleepCheckBox" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed">阻止系统休眠</CheckBox>
+                                        <CheckBox Name="PreventDisplaySleepCheckBox" Margin="0,3" Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed">阻止屏幕关闭</CheckBox>
                                     </StackPanel>
                                 </StackPanel>
                                 <StackPanel Grid.Column="1">
@@ -138,29 +136,20 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="定时时长:" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBox Grid.Column="1" Name="loginTime" FontSize="14" Padding="3" 
-                                         ToolTip="默认 10 秒；每轮检测及必要认证结束后，再等待此间隔。"
+                                <TextBox Grid.Column="1" Name="loginTime" FontSize="14" Padding="3"
                                          TextChanged="Interval_TextChanged"
                                          PreviewTextInput="Code_PreviewTextInput" InputMethod.IsInputMethodEnabled="False"/>
                                 <TextBlock Grid.Column="2" Text="秒" FontSize="14" VerticalAlignment="Center" Margin="4,0,0,0"/>
                             </Grid>
                             
                             <TextBlock Grid.Row="2" x:Name="IntervalValidationText" TextWrapping="Wrap" FontSize="12" Foreground="OrangeRed" Margin="0,0,0,8"/>
-                            <TextBlock Grid.Row="3" TextWrapping="Wrap" FontSize="12" Foreground="#666" Margin="0,0,0,15">
-                                先尝试优先的网络，未成功时再尝试另一个；成功或已在线即停止。宿舍网连接需要选择运营商。
-                            </TextBlock>
                         </Grid>
                     </Grid>
                     
                     <StackPanel Margin="0,8,0,0">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="状态不明重连次数：" VerticalAlignment="Center"/>
-                            <TextBox x:Name="UnknownReconnectCount" Width="55" Padding="3" TextChanged="UnknownReconnectCount_TextChanged"/>
-                        </StackPanel>
-                        <TextBlock x:Name="UnknownReconnectValidationText" Foreground="OrangeRed" TextWrapping="Wrap"/>
-                        <TextBlock Text="默认 3 次，允许 0～100，0 为关闭；修改后立即保存。启动、手动与自动登录各轮开始统一至少间隔 30 秒，冷却中不消耗重连次数。状态不明重连成功或已在线即停止；达到上限后继续探测，外网恢复正常后重置次数。重启程序会重新计数。" TextWrapping="Wrap" FontSize="12" Foreground="#666" Margin="0,4,0,0"/>
+                        <CheckBox x:Name="EnhancedModeCheckBox" Content="增强模式"
+                                  Checked="ImmediateOption_Changed" Unchecked="ImmediateOption_Changed"/>
                     </StackPanel>
-                    <TextBlock Text="允许与 TUN 共存；已知校园认证跳转按原策略重连，状态不明时按上述次数有限尝试。每轮仍需先确认认证 IP，请确保校园认证地址的路由可达。" TextWrapping="Wrap" Foreground="#666" Margin="0,8,0,0"/>
 
                     <StackPanel x:Name="LoggingPanel" Margin="0,12,0,0">
                         <TextBlock Text="运行日志" FontWeight="Bold" Margin="0,0,0,6"/>
@@ -170,7 +159,6 @@
                             <TextBlock Text=" MB（1～100）" VerticalAlignment="Center"/>
                         </StackPanel>
                         <TextBlock x:Name="LogSizeValidationText" Foreground="OrangeRed" TextWrapping="Wrap"/>
-                        <TextBlock Text="修改后立即保存。新版运行日志保留最近 5 个文件，超限后覆盖最旧文件；旧版历史日志保留。" TextWrapping="Wrap" FontSize="12" Foreground="#666" Margin="0,4,0,0"/>
                     </StackPanel>
 
                     <!-- 关于面板 -->

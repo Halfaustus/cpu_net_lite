@@ -260,3 +260,48 @@ Windows x64 / SDK10.0.403，执行dotnet build .\cpu_net.csproj -c Release -o .\
 Windows x64 / SDK10.0.403，执行dotnet publish .\cpu_net.csproj -c Release --no-restore --self-contained false -o .\artifacts\V1.0，退出0，20条警告、无编译错误；日志artifacts/build-v1.0.log。输出7项程序文件，不包含配置、日志、旧安装器。
 运行可行性检查通过，其他项目待人工验收。范围仅整理后的Release构建/发布；没有启动或发送认证，没有改写用户配置或启动项。用户已确认的是整理前功能，不能以发布编译替代整理后人工验收。
 提交前fetch确认origin/master与本地HEAD相同（2a2a148），无需合并或强推。计划以master推送origin并创建v1.0标签；实际提交/推送结果见交付信息与Git历史。CLI及安装器继续冻结。
+
+## 手动登录冷却范围修正（2026-10-27）
+用户澄清30秒只限制自动登录，手动登录仅需等待当前登录流程结束。主进程修改MainViewModel：冷却仅检查自动入口，每个实际开始的轮次继续刷新共享时间戳；手动遇到正在执行的流程时提示等待。MainWindow显式标记启动登录，维持启动登录独立于定时检测开关。同步配置页说明、README及DESIGN，不修改次数预算、凭据或其他认证保护。
+Windows x64/.NET SDK10.0.403；dotnet build .\cpu_net.csproj -c Release -o .\artifacts\manual-login-fix --no-restore，退出0，20警告/0错误，7.12秒。运行可行性检查通过，其他项目待人工验收。范围仅Release编译，未启动或认证；手动连续操作、自动冷却、忙碌提示待人工验证。没有提交/推送，不移动已发布v1.0标签，产物独立保存以待人工确认。
+2026-10-27 用户要求合并至主要位置：源码本已在主工程，现执行dotnet publish .\cpu_net.csproj -c Release --no-restore --self-contained false -o .\artifacts\V1.0，退出0，本次增量发布未报告警告/错误。保留V1.0已有config.yaml和Log，清理manual-login-fix目录中的7个纯编译文件及空目录。运行可行性检查通过，其他项目待人工验收；仅发布，未启动/认证，未提交推送，v1.0标签不变。
+
+## 增强模式专项（2026-10-28）
+执行者：主进程，未启动子进程。修改前读取AGENTS.md、当前源码、DESIGN、RUN-LOG及Git状态，分支master；保留原7个文件中的未提交成果，尤其手动登录不受冷却限制及启动登录显式标记。未读取真实凭据或开展网络故障诊断。
+修改：配置页以增强模式复选框取代次数输入，EnhancedMode默认false、即时单字段保存，初始化/预览沿用禁止保存及系统操作保护。移除未知状态次数、上限和成功/已在线后的完成锁止；增强模式开启时持续按探测结果及30秒自动冷却重连，成功/已在线仅结束当前轮。旧UnknownReconnectAttempts仅兼容保留，不参与决策、不映射新开关。保留认证IP确认、串行锁、优先顺序、发送前最新设置检查及手动登录冷却修正。同步README和DESIGN。
+环境：Windows x64、PowerShell、.NET SDK10.0.403、net10.0-windows，工作目录C:\Projects\CPU_NET_Lite。设置DOTNET_CLI_TELEMETRY_OPTOUT=1、DOTNET_GENERATE_ASPNET_CERTIFICATE=false、DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false。
+实际命令：dotnet build .\cpu_net.csproj -c Release -o .\artifacts\enhanced-mode --no-restore
+退出0，20警告/0错误，10.34秒；日志artifacts/build-enhanced-mode.log，产物artifacts/enhanced-mode。未发现编译错误，无运行错误修复事项。
+运行可行性检查通过，其他项目待人工验收。范围仅Release C#/XAML编译。未启动客户端、发送认证、改写真实配置或更新artifacts/V1.0；开关加载/保存、持续重连、冷却、关闭后的停止及其他实际运行路径未验证，人工事项见DESIGN。未执行功能测试、修改测试断言、提交或推送，其他开发计划继续冻结。
+
+### 增强模式：外网探测异常诊断追加（2026-10-28）
+主进程实现，无子进程。保留已有未提交成果。新增ProbeDiagnostics，修改CampusConnectionService探测诊断、MainViewModel日志去重及恢复提示；同步设计和README。具体字段、保守脱敏与去重边界见DESIGN。未改变正常判定表达式及已知门户判定规则，未开展网络故障诊断或功能验收。
+环境Windows x64/PowerShell/.NET SDK10.0.403/net10.0-windows，目录C:\Projects\CPU_NET_Lite；沿用关闭遥测/开发证书生成/工具PATH修改的环境参数。实际命令：dotnet build .\cpu_net.csproj -c Release -o .\artifacts\enhanced-mode --no-restore。退出0，20警告/0错误，3.62秒，日志artifacts/build-enhanced-mode-diagnostics.log。未发现编译错误，无运行错误修复事项。
+运行可行性检查通过，其他项目待人工验收。范围仅Release C#/XAML编译。产物artifacts/enhanced-mode包含增强模式及此次诊断追加；未替换V1.0、未启动程序、未发起外网探测或真实认证、未改写用户配置、未提交推送。异常日志内容/去重/恢复及增强模式实际行为均未验证，交由用户人工验收。
+
+2026-10-28 用户明确要求启动。启动前未发现cpu_net.exe进程，artifacts/enhanced-mode/config.yaml不存在；未复制凭据。正常模式启动artifacts/enhanced-mode/cpu_net.exe，Start-Process返回PID=42576，即时HasExited=False。本条仅记录启动命令返回，不推定初始化或功能验收通过；未操作界面、认证或设置，由用户人工验收。
+
+### 设置说明精简（2026-10-28）
+用户要求详细解释仅保留在README。主进程移除配置页保存方式、优先顺序、增强模式、TUN与日志轮转的常驻说明，移除电源和间隔详细ToolTip；保留名称、单位、范围、错误提示及简短保存反馈。详细行为说明已在README保留，不改变设置/认证逻辑。
+Windows x64/.NET SDK10.0.403，执行dotnet build .\cpu_net.csproj -c Release -o .\artifacts\enhanced-mode-ui --no-restore，退出0，20警告/0错误，3.13秒；日志artifacts/build-enhanced-mode-ui.log。
+运行可行性检查通过，其他项目待人工验收。范围仅Release C#/XAML编译。独立输出避免覆盖此前启动的增强模式程序；未重启、未认证、未改用户配置，UI待人工验收，无提交推送。
+
+### 外网完整诊断文件（2026-10-28）
+主进程按用户追加授权实现，无子进程。保留既有增强模式、界面精简和手动冷却未提交成果。CampusConnectionService改为产生完整探测诊断，响应正文/Location原样保存；ProbeDiagnostics实现运行目录Diagnostics下唯一文件与20份数量保留；MainViewModel仅首次/异常内容变化写文件，5分钟重复汇总不新建，界面/运行日志只显示简短原因与成功文件的绝对路径。写入失败返回简短错误，不抛出中断检测，不显示失败路径。不读取/附带认证请求凭据、Cookie或本地配置，不上传。更新README、DESIGN及Git忽略。
+环境Windows x64/PowerShell/.NET SDK10.0.403/net10.0-windows，目录C:\Projects\CPU_NET_Lite；沿用关闭遥测、证书生成和工具PATH修改的环境参数。实际命令：dotnet build .\cpu_net.csproj -c Release -o .\artifacts\enhanced-mode-ui --no-restore。退出0，20警告/0错误，2.77秒，日志artifacts/build-diagnostic-files.log。未发现编译错误，无运行错误修复事项。
+运行可行性检查通过，其他项目待人工验收。范围仅Release C#/XAML编译。未启动、未探测或认证、未生成真实诊断文件、未执行功能测试、未替换V1.0、未提交推送。文件内容、20份保留、重复合并、失败处理、界面显示及增强模式实际路径均未验证，由用户人工验收；其他计划继续冻结。
+
+2026-10-28 用户确认已退出并明确要求重新启动。启动前未发现cpu_net.exe进程，artifacts/enhanced-mode-ui/config.yaml不存在；未复制或修改配置。正常启动最新artifacts/enhanced-mode-ui/cpu_net.exe，Start-Process返回PID=32060，即时HasExited=False。未操作设置或认证；仅记录启动命令返回，初始化、完整诊断文件及增强模式行为由用户人工验收。
+
+### HTTP 200 正文门户识别专项（2026-10-28）
+执行者主进程，无子进程。修改前读取根AGENTS.md、Git状态、当前探测/认证协调及设计/运行记录；分支master，已有未提交成果均保留。首次读取常量时使用src/Constants/NetworkConstants.cs路径不存在，随后通过rg定位并读取src/Core/Constants/NetworkConstants.cs中的现有常量，不影响实现/编译。
+新增PortalPageRecognizer静态识别实测宿舍认证模板；CampusConnectionService在既有正常正文判定之后增加HTTP200/text-html分支，命中返回CampusPortal/0并记录指定简短原因。沿用既有认证/排序/冷却及完整诊断文件流程，未更改MainViewModel或认证接口。README、DESIGN及AGENTS同步说明。
+环境Windows x64/PowerShell/.NET SDK10.0.403/net10.0-windows，目录C:\Projects\CPU_NET_Lite。设置DOTNET_CLI_TELEMETRY_OPTOUT=1、DOTNET_GENERATE_ASPNET_CERTIFICATE=false、DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false。
+实际命令：dotnet build .\cpu_net.csproj -c Release -o .\artifacts\http200-portal --no-restore
+退出0，20警告/0错误，2.79秒；完整构建日志artifacts/build-http200-portal.log，独立产物artifacts/http200-portal。未发现编译错误，无运行错误修复事项。
+运行可行性检查通过，其他项目待人工验收。范围仅Release C#/XAML编译；未执行页面识别功能测试、未启动程序、未探测/认证/访问页面中的地址、未改写用户配置或系统设置、未覆盖当前运行目录、未提交推送。页面识别与后续重连实际行为未验证，由用户人工验收。其他开发计划继续冻结。
+
+### V1.1本地Git归档（2026-10-28）
+用户明确授权“先将目前版本保存本地git作为V1.1”。主进程将工程版本设为1.1.0，Assembly/File为1.1.0.0，更新README/DESIGN/HANDOFF；归档此前所有专项源码和文档成果。计划在master提交并创建本地v1.1标签，不推送、不发布，不移动v1.0；实际提交标识以Git历史为准。真实配置、日志、Diagnostics、构建输出、归档与OpenWrt不纳入。
+Windows x64/.NET SDK10.0.403/PowerShell；沿用关闭遥测、证书生成和工具PATH修改的环境参数，执行dotnet build .\cpu_net.csproj -c Release -o .\artifacts\V1.1 --no-restore。退出0，20警告/0错误，3.21秒，日志artifacts/build-v1.1.log。
+运行可行性检查通过，其他项目待人工验收。范围仅版本号调整后的Release C#/XAML编译；未发现编译错误。独立输出artifacts/V1.1，未启动/认证、未覆盖旧运行目录或改写用户配置，未开展功能测试。用户本次归档授权不视为新增功能已经人工验收，其他开发继续冻结。
