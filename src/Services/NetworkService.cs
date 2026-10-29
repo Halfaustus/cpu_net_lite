@@ -9,45 +9,66 @@ using System.Text.Json;
 
 namespace cpu_net.Services
 {
-    /// <summary>
-    /// 网络请求服务（基于同步 HttpWebRequest 实现）
-    /// </summary>
+    /// <summary>校园状态查询与认证请求；总超时覆盖响应头及完整正文。</summary>
     public static class NetworkService
     {
-        /// <summary>
-        /// 同步 HTTP GET 请求
-        /// </summary>
-        public static string HttpGetRequest(string url, Action<string>? diagnostic = null, string operationName = "认证")
+        private static readonly HttpClient CampusClient = new(new HttpClientHandler
         {
+            UseProxy = false,
+            UseCookies = false,
+            AllowAutoRedirect = false,
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+        }) { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
+
+        // 保留现有工作线程调用接口，不引入额外认证并发或隐含重试。
+        public static string HttpGetRequest(string url, Action<string>? diagnostic = null, string operationName = "认证",
+            System.Threading.CancellationToken cancellationToken = default)
+            => HttpGetRequestAsync(url, diagnostic, operationName, cancellationToken).GetAwaiter().GetResult();
+
+        private static async System.Threading.Tasks.Task<string> HttpGetRequestAsync(string url,
+            Action<string>? diagnostic, string operationName, System.Threading.CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             var endpoint = new Uri(url).GetLeftPart(UriPartial.Path);
             var timer = Stopwatch.StartNew();
-            diagnostic?.Invoke($"{operationName}请求：{endpoint}；直连；超时 5000 ms");
+            diagnostic?.Invoke($"{operationName}请求：{endpoint}；直连；总超时 5000 ms");
+            using var deadline = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(TimeSpan.FromSeconds(5));
+            int? status = null;
             try
             {
-                using var getResponse = CreateGetHttpWebRequest(url).GetResponse() as HttpWebResponse;
-                if (getResponse != null && (int)getResponse.StatusCode >= 300)
-                    throw new InvalidOperationException($"{endpoint}；直连；HTTP {(int)getResponse.StatusCode}；认证接口返回重定向；耗时 {timer.ElapsedMilliseconds} ms");
-                string content = GetHttpResponse(getResponse);
-                diagnostic?.Invoke($"{operationName}响应：{endpoint}；HTTP {(int?)getResponse?.StatusCode}；耗时 {timer.ElapsedMilliseconds} ms；正文长度 {content.Length}");
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                using var response = await CampusClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
+                    deadline.Token).ConfigureAwait(false);
+                status = (int)response.StatusCode;
+                if (!response.IsSuccessStatusCode)
+                    throw new InvalidOperationException($"{endpoint}；直连；HTTP {status}；请求未成功（不跟随重定向）；耗时 {timer.ElapsedMilliseconds} ms");
+                using var stream = await response.Content.ReadAsStreamAsync(deadline.Token).ConfigureAwait(false);
+                using var reader = new StreamReader(stream, Encoding.UTF8);
+                string content = await reader.ReadToEndAsync(deadline.Token).ConfigureAwait(false);
+                deadline.Token.ThrowIfCancellationRequested();
+                diagnostic?.Invoke($"{operationName}响应：{endpoint}；HTTP {status}；耗时 {timer.ElapsedMilliseconds} ms；正文长度 {content.Length}");
                 return content;
             }
-            catch (WebException ex)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (OperationCanceledException)
             {
-                using var response = ex.Response as HttpWebResponse;
-                string reason = response != null ? $"HTTP {(int)response.StatusCode}" : ex.Status switch
-                {
-                    WebExceptionStatus.NameResolutionFailure => "DNS 解析失败",
-                    WebExceptionStatus.ProxyNameResolutionFailure => "代理 DNS 解析失败",
-                    WebExceptionStatus.ConnectFailure => "服务器连接失败",
-                    WebExceptionStatus.Timeout => "请求超时",
-                    WebExceptionStatus.TrustFailure => "证书验证失败",
-                    _ => ex.Status.ToString()
-                };
-                throw new InvalidOperationException($"{endpoint}；直连；{reason}；耗时 {timer.ElapsedMilliseconds} ms" +
-                    (ex.InnerException is SocketException socket ? $"；Socket={socket.SocketErrorCode}" : ""));
+                throw new InvalidOperationException($"{operationName}请求总超时（5000 ms，含正文读取）；HTTP={status?.ToString() ?? "未收到响应"}；耗时 {timer.ElapsedMilliseconds} ms");
+            }
+            catch (HttpRequestException ex)
+            {
+                // 不输出原始异常Message或完整认证URL。
+                throw new InvalidOperationException($"{operationName}请求失败：{DescribeFailure(ex)}；耗时 {timer.ElapsedMilliseconds} ms");
+            }
+            catch (IOException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(cancellationToken);
+            }
+            catch (IOException)
+            {
+                throw new InvalidOperationException($"{operationName}响应读取失败；HTTP={status?.ToString() ?? "未收到响应"}；耗时 {timer.ElapsedMilliseconds} ms");
             }
         }
-
         public static string DescribeFailure(Exception exception)
         {
             if (exception is OperationCanceledException)
@@ -81,29 +102,5 @@ namespace cpu_net.Services
             return text.Substring(1, text.Length - 2).Trim();
         }
 
-        private static HttpWebRequest CreateGetHttpWebRequest(string url)
-        {
-            var getRequest = WebRequest.Create(url) as HttpWebRequest;
-            getRequest!.Method = "GET";
-            getRequest.Proxy = null;
-            getRequest.AllowAutoRedirect = false;
-            getRequest.Timeout = 5000;
-            getRequest.ReadWriteTimeout = 5000;
-            getRequest.ContentType = "text/html;charset=UTF-8";
-            getRequest.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
-            return getRequest;
-        }
-
-        private static string GetHttpResponse(HttpWebResponse? response)
-        {
-            if (response == null)
-            {
-                return string.Empty;
-            }
-
-            using var reader = new StreamReader(response.GetResponseStream()!, Encoding.UTF8);
-            return reader.ReadToEnd();
-        }
     }
 }
-

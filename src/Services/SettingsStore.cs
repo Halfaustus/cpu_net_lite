@@ -35,6 +35,12 @@ namespace cpu_net.Services
             }
         }
 
+        // 自动检测不能把损坏配置当成“用户关闭功能”；交给调度循环记录并重试。
+        public SettingModel ReadForNetwork(bool force = false)
+        {
+            lock (Gate) return ReadCore(force);
+        }
+
         private static SettingModel Copy(SettingModel source)
         {
             var copy = new SettingModel();

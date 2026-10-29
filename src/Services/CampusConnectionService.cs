@@ -76,7 +76,7 @@ namespace cpu_net.Services
                     PortalPageRecognizer.IsKnownDormitoryPage(body))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    Report("检测到已知宿舍网认证页面（HTTP 200 正文跳转）");
+                    report("检测到已知宿舍网认证页面（HTTP 200 正文跳转）");
                     return new InternetProbeResult(InternetProbeState.CampusPortal, 0);
                 }
                 if ((status == 301 || status == 302 || status == 303 || status == 307 || status == 308) &&
@@ -84,7 +84,7 @@ namespace cpu_net.Services
                 {
                     if (destination.Host == new Uri(NetworkConstants.BroadbandDrComUrl).Host)
                     {
-                        Report("已知宿舍网认证跳转", bodyFailure);
+                        report("检测到已知宿舍网认证页面（HTTP 重定向）");
                         return new InternetProbeResult(InternetProbeState.CampusPortal, 0);
                     }
                     if (destination.Host == new Uri(NetworkConstants.CpuDrComUrl).Host)
@@ -126,18 +126,20 @@ namespace cpu_net.Services
                     report("尚未选择有效运营商，跳过宿舍网连接。");
                     continue;
                 }
-                var target = ReadTarget(mode, report);
+                var target = ReadTarget(mode, report, cancellationToken);
                 if (target != null) yield return target;
             }
         }
 
-        private static CampusLoginTarget? ReadTarget(int mode, Action<string> report)
+        private static CampusLoginTarget? ReadTarget(int mode, Action<string> report, CancellationToken cancellationToken)
         {
             string label = mode == 0 ? "宿舍网" : "校园网";
             try
             {
                 string raw = NetworkService.HttpGetRequest(mode == 0
-                    ? NetworkConstants.BroadbandDrComUrl : NetworkConstants.CpuDrComUrl, report, operationName: "状态查询");
+                    ? NetworkConstants.BroadbandDrComUrl : NetworkConstants.CpuDrComUrl, report, operationName: "状态查询",
+                    cancellationToken: cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 var result = JsonSerializer.Deserialize<DrComIpResult>(
                     NetworkService.ExtractJson(raw, NetworkConstants.DrComCallback));
                 if (IPAddress.TryParse(result?.ss5, out var address) && IsUsableIpv4(address))
@@ -147,6 +149,7 @@ namespace cpu_net.Services
                 }
                 report($"{label}状态接口未提供有效认证 IPv4，不使用默认路由或 TUN 地址代替。");
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
                 // 不输出原始响应及 JSON 片段，状态查询中可能带有身份信息。

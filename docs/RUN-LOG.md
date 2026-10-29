@@ -305,3 +305,20 @@ Windows x64/.NET SDK10.0.403，执行dotnet build .\cpu_net.csproj -c Release -o
 用户明确授权“先将目前版本保存本地git作为V1.1”。主进程将工程版本设为1.1.0，Assembly/File为1.1.0.0，更新README/DESIGN/HANDOFF；归档此前所有专项源码和文档成果。计划在master提交并创建本地v1.1标签，不推送、不发布，不移动v1.0；实际提交标识以Git历史为准。真实配置、日志、Diagnostics、构建输出、归档与OpenWrt不纳入。
 Windows x64/.NET SDK10.0.403/PowerShell；沿用关闭遥测、证书生成和工具PATH修改的环境参数，执行dotnet build .\cpu_net.csproj -c Release -o .\artifacts\V1.1 --no-restore。退出0，20警告/0错误，3.21秒，日志artifacts/build-v1.1.log。
 运行可行性检查通过，其他项目待人工验收。范围仅版本号调整后的Release C#/XAML编译；未发现编译错误。独立输出artifacts/V1.1，未启动/认证、未覆盖旧运行目录或改写用户配置，未开展功能测试。用户本次归档授权不视为新增功能已经人工验收，其他开发继续冻结。
+
+2026-10-28 用户授权清理旧版本并启动V1.1。确认无cpu_net进程，核对所有移动路径位于项目artifacts内；将V1.0、enhanced-mode、enhanced-mode-ui、http200-portal整体归档至C:\Projects\CPU_NET_Lite\.local-archive\pre-v1.1-20261028-170656，保留所有历史数据。最新enhanced-mode-ui的config.yaml、Log、Diagnostics复制到原本无数据的V1.1目录，未改写配置内容。启动前告知定时检测/增强模式/启动收起已开启，程序可能自动认证；按用户启动授权正常启动artifacts/V1.1/cpu_net.exe，PID=12432，即时HasExited=False。未操作界面或手动发起认证，不据此推定初始化/功能验收通过。SDK/NuGet缓存保留；无新提交或推送，v1.1标签不变。
+
+### 已知宿舍门户仅简短提示（2026-10-28）
+主进程按用户要求将HTTP200宿舍页面及HTTP重定向宿舍门户改为普通简短提示，绕过诊断文件保存，保留原重复汇总及认证流程。其他异常诊断不变。保留此前运行归档记录未提交成果。
+Windows x64/.NET SDK10.0.403，沿用此前环境参数；dotnet build .\cpu_net.csproj -c Release -o .\artifacts\portal-log-only --no-restore。退出0，20警告/0错误，7.44秒；日志artifacts/build-portal-log-only.log。运行可行性检查通过，其他项目待人工验收。仅Release编译，未发现编译错误；未启动/认证、未覆盖V1.1或改配置、未提交推送，v1.1标签不变。用户随后询问重连漏洞，另做只读代码分析，不运行功能测试或自动扩展修复。
+
+### 前两项重连风险处理（2026-10-29）
+主进程实施，无子进程。读取Git状态及当前配置缓存、调度、状态查询/认证请求代码；保留已有未提交的已知宿舍门户仅提示修改及文档记录。配置读取异常改为循环等待重试、禁止本轮认证；校园请求换为可取消HttpClient IO，5秒总时限覆盖完整正文，取消贯通查询/认证并释放串行锁。后两项仅在DESIGN/README标记潜在局限，未改变成功/已在线停止规则或门户识别模板。
+Windows x64/PowerShell/.NET SDK10.0.403/net10.0-windows，工作目录C:\Projects\CPU_NET_Lite；设置DOTNET_CLI_TELEMETRY_OPTOUT=1、DOTNET_GENERATE_ASPNET_CERTIFICATE=false、DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false。
+实际命令：dotnet build .\cpu_net.csproj -c Release -o .\artifacts\reconnect-resilience --no-restore。退出0，18警告/0错误，8.40秒，日志artifacts/build-reconnect-resilience.log。未发现编译错误，无编译错误修复事项。
+运行可行性检查通过，其他项目待人工验收。范围仅Release C#/XAML编译，未进行故障注入/功能测试、未启动或认证、未改用户配置/系统设置、未覆盖V1.1、未提交推送，v1.1标签不变。独立产物artifacts/reconnect-resilience包含此次修改和此前宿舍门户仅提示修改。配置恢复、总超时及取消实际行为未验证，其他开发继续冻结。
+
+### V1.1正式提交推送准备（2026-10-29）
+用户授权正式提交推送当前1.1修正，并在完成后清理旧版本。主进程核对无cpu_net.exe进程；origin为https://github.com/Halfaustus/cpu_net_lite.git，远端master=51653e1，只有v1.0标签，本地v1.1尚未推送。git fetch origin成功，无需合并。保留当前全部未提交修改及运行数据。
+Windows x64/.NET SDK10.0.403/PowerShell，沿用关闭遥测/证书生成/工具PATH修改的环境参数；执行dotnet publish .\cpu_net.csproj -c Release --no-restore --self-contained false -o .\artifacts\v1.1-release。退出0，本次增量发布未报告警告或错误；日志artifacts/publish-v1.1-final.log。此前完整编译18警告不因增量发布未报告而视为修复。
+运行可行性检查通过，其他项目待人工验收。仅Release编译/发布，没有启动/认证或执行功能测试。最终提交后将本地v1.1更新至该提交并与master正常推送origin，不强推；随后归档旧程序及阶段输出并更新V1.1，保留配置/日志/诊断，不自动启动。实际Git结果和清理结果见交付信息；不创建GitHub Release，不恢复其他开发计划。

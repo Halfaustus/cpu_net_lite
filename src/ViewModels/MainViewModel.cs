@@ -32,6 +32,9 @@ namespace cpu_net.ViewModel
         private int _logDirty;
         private int _checkingNetwork;
         private int _loggingIn;
+        private readonly object _loginCancellationGate = new();
+        private CancellationTokenSource? _activeLoginCancellation;
+        private int _lastDetectionInterval = 10;
 
         // 内存日志缓冲区（即时显示，不依赖文件IO）
         private readonly Queue<string> _txtLogQueue = new Queue<string>();
@@ -89,8 +92,7 @@ namespace cpu_net.ViewModel
         {
             if (Program.IsPreview || _stopped) return;
             _networkCancellation?.Cancel();
-            var setting = new SettingsStore().Read(force: true);
-            if (!CanCheck(setting)) return;
+            lock (_loginCancellationGate) _activeLoginCancellation?.Cancel();
             var cancellation = new CancellationTokenSource();
             _networkCancellation = cancellation;
             _ = RunNetworkLoopAsync(cancellation);
@@ -118,9 +120,20 @@ namespace cpu_net.ViewModel
             {
                 while (!token.IsCancellationRequested)
                 {
-                    var setting = _settingData.Read();
-                    if (!CanCheck(setting)) return;
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Clamp(setting.LoginTime, 1, 86400)), token);
+                    SettingModel setting;
+                    try
+                    {
+                        setting = new SettingsStore().ReadForNetwork();
+                        _lastDetectionInterval = Math.Clamp(setting.LoginTime, 1, 86400);
+                    }
+                    catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is YamlDotNet.Core.YamlException)
+                    {
+                        ReportProbe($"配置读取失败（{ex.GetType().Name}），本轮不认证，{_lastDetectionInterval} 秒后重试。");
+                        await Task.Delay(TimeSpan.FromSeconds(_lastDetectionInterval), token);
+                        continue;
+                    }
+                    await Task.Delay(TimeSpan.FromSeconds(_lastDetectionInterval), token);
+                    if (!CanCheck(setting)) continue;
                     if (Interlocked.Exchange(ref _checkingNetwork, 1) != 0) continue;
                     try { await CheckNetworkAsync(token); }
                     catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
@@ -142,6 +155,7 @@ namespace cpu_net.ViewModel
             _stopped = true;
             _settingsWatcher?.Dispose();
             _networkCancellation?.Cancel();
+            lock (_loginCancellationGate) _activeLoginCancellation?.Cancel();
             _logRefreshTimer.Stop();
         }
 
@@ -174,7 +188,7 @@ namespace cpu_net.ViewModel
         private async Task CheckNetworkAsync(CancellationToken token)
         {
             if (!_settingData.PathExist()) return;
-            var setting = _settingData.Read();
+            var setting = new SettingsStore().ReadForNetwork();
             if (!setting.NetworkLoginEnabled || !setting.IsSetLogin ||
                 string.IsNullOrWhiteSpace(setting.Username) || string.IsNullOrEmpty(setting.Password)) return;
 
@@ -268,6 +282,12 @@ namespace cpu_net.ViewModel
             }
             try
             {
+                lock (_loginCancellationGate)
+                {
+                    if (_stopped) return 0;
+                    _activeLoginCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    cancellationToken = _activeLoginCancellation.Token;
+                }
                 int result = LoginCore(detectedPortalMode, cancellationToken, unknownStateRetry, isStartupLogin);
                 if (unknownStateRetry && (result == 1 || result == 2))
                 {
@@ -281,7 +301,15 @@ namespace cpu_net.ViewModel
                 Info($"登录流程无法继续：{NetworkService.DescribeFailure(ex)}");
                 return 0;
             }
-            finally { Volatile.Write(ref _loggingIn, 0); }
+            finally
+            {
+                lock (_loginCancellationGate)
+                {
+                    _activeLoginCancellation?.Dispose();
+                    _activeLoginCancellation = null;
+                }
+                Volatile.Write(ref _loggingIn, 0);
+            }
         }
 
         private int LoginCore(int? detectedPortalMode, CancellationToken cancellationToken, bool unknownStateRetry,
@@ -295,7 +323,7 @@ namespace cpu_net.ViewModel
                 return 0;
             }
 
-            var setting = _settingData.Read();
+            var setting = new SettingsStore().ReadForNetwork();
             if (!setting.NetworkLoginEnabled ||
                 (automatic && !setting.IsSetLogin) ||
                 (unknownStateRetry && !setting.EnhancedMode)) return 0;
@@ -327,7 +355,7 @@ namespace cpu_net.ViewModel
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 foundTarget = true;
-                var latest = new SettingsStore().Read(force: true);
+                var latest = new SettingsStore().ReadForNetwork(force: true);
                 if (!latest.NetworkLoginEnabled || (automatic && !latest.IsSetLogin) ||
                     (unknownStateRetry && !latest.EnhancedMode) ||
                     latest.PreferredNetwork != setting.PreferredNetwork || latest.Username != setting.Username ||
@@ -340,7 +368,7 @@ namespace cpu_net.ViewModel
                 }
                 Info(target.Mode == 0 ? "开始尝试宿舍网登录。" : "开始尝试校园网登录。");
                 cancellationToken.ThrowIfCancellationRequested();
-                var outcome = AuthenticateTarget(target, latest);
+                var outcome = AuthenticateTarget(target, latest, cancellationToken);
                 if (outcome == LoginAttemptOutcome.Success) return 1;
                 if (outcome == LoginAttemptOutcome.AlreadyOnline) return 2;
             }
@@ -351,12 +379,13 @@ namespace cpu_net.ViewModel
 
         private enum LoginAttemptOutcome { Failed, Success, AlreadyOnline }
 
-        private LoginAttemptOutcome AuthenticateTarget(CampusLoginTarget target, SettingModel setting)
+        private LoginAttemptOutcome AuthenticateTarget(CampusLoginTarget target, SettingModel setting, CancellationToken cancellationToken)
         {
             try
             {
                 string loginUrl = BuildLoginUrl(target.Mode, setting, target.Address);
-                string responseText = NetworkService.HttpGetRequest(loginUrl, Info);
+                string responseText = NetworkService.HttpGetRequest(loginUrl, Info, cancellationToken: cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
 
                 // 去除首尾包裹（如 dr1004(...) ）
                 if (string.IsNullOrWhiteSpace(responseText))
@@ -392,6 +421,7 @@ namespace cpu_net.ViewModel
                 Info($"认证结果：result={loginResult.result}；ret_code={errorCode?.ret_code}");
                 return LoginAttemptOutcome.Failed;
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (System.Net.Http.HttpRequestException e)
             {
                 Info("登录失败");
