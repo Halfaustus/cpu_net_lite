@@ -322,3 +322,78 @@ Windows x64/PowerShell/.NET SDK10.0.403/net10.0-windows，工作目录C:\Project
 用户授权正式提交推送当前1.1修正，并在完成后清理旧版本。主进程核对无cpu_net.exe进程；origin为https://github.com/Halfaustus/cpu_net_lite.git，远端master=51653e1，只有v1.0标签，本地v1.1尚未推送。git fetch origin成功，无需合并。保留当前全部未提交修改及运行数据。
 Windows x64/.NET SDK10.0.403/PowerShell，沿用关闭遥测/证书生成/工具PATH修改的环境参数；执行dotnet publish .\cpu_net.csproj -c Release --no-restore --self-contained false -o .\artifacts\v1.1-release。退出0，本次增量发布未报告警告或错误；日志artifacts/publish-v1.1-final.log。此前完整编译18警告不因增量发布未报告而视为修复。
 运行可行性检查通过，其他项目待人工验收。仅Release编译/发布，没有启动/认证或执行功能测试。最终提交后将本地v1.1更新至该提交并与master正常推送origin，不强推；随后归档旧程序及阶段输出并更新V1.1，保留配置/日志/诊断，不自动启动。实际Git结果和清理结果见交付信息；不创建GitHub Release，不恢复其他开发计划。
+
+### 状态查询异常详情修复（2026-11-04）
+执行者主进程，无子进程。保留用户已有AGENTS.md修改及docs/history未跟踪成果，未编辑这些文件。修改NetworkService和MainViewModel，修复状态查询错误描述退化为InvalidOperationException的问题；细节见DESIGN。未改变超时、认证目标、优先顺序或重连规则，不开展实际网络故障诊断。
+环境Windows x64/PowerShell/.NET SDK10.0.403/net10.0-windows；工作目录C:\Projects\CPU_NET_Lite。设置DOTNET_CLI_TELEMETRY_OPTOUT=1、DOTNET_GENERATE_ASPNET_CERTIFICATE=false、DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false。
+实际命令：dotnet build .\cpu_net.csproj -c Release --no-restore -o .\artifacts\request-error-detail
+退出0，18警告/0错误，9.24秒；日志artifacts/build-request-error-detail.log。运行可行性检查通过，其他项目待人工验收。范围仅Release C#/XAML编译，未发现编译错误。未启动、探测或认证，未改用户配置/系统设置，未覆盖artifacts/V1.1，未提交推送。具体错误提示及实际故障原因仍未验证，由用户人工确认。
+
+### 校园网络识别，Wi-Fi 与有线登记（2026-11-05）
+
+执行者为主进程，无子进程。用户要求在校外暂停校园认证，校园 Wi-Fi 与宿舍网线均需支持。保留原有 AGENTS.md、docs/history、NetworkService 及此前异常说明修复，继续在 DESIGN/RUN-LOG 和 MainViewModel 上增量修改。
+
+实现范围为 CampusNetworkService、新设置及快照字典复制、配置页登记/删除/开关、自动探测与自动/启动认证门控，复用 TunDetectionService 的 TUN 名称判定，ResolveTargets 末尾增加可选 canQuery 回调。README 与 DESIGN 记录使用流程和限制。旧配置默认关闭，首次登记后开启；识别失败或无匹配时暂停自动流程，状态变化时记录提示，手动登录继续沿用现有路径。
+
+实际环境 Windows x64、PowerShell、.NET SDK 10.0.403、net10.0-windows；工作目录 C:\Projects\CPU_NET_Lite。设置 DOTNET_CLI_TELEMETRY_OPTOUT=1、DOTNET_GENERATE_ASPNET_CERTIFICATE=false、DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false。运行 dotnet --version 返回 10.0.403。独立输出目录为 artifacts/campus-network-recognition。
+
+两次实际执行 dotnet build .\cpu_net.csproj -c Release --no-restore -o .\artifacts\campus-network-recognition。首次退出 0，18 警告、0 错误，9.97 秒，日志 artifacts/build-campus-network-recognition.log。完善各目标状态查询前的门控及暂停原因后，最终编译退出 0，18 警告、0 错误，1.85 秒，日志 artifacts/build-campus-network-recognition-final.log。未发现编译错误，无编译错误修复记录。
+
+运行可行性检查通过，其他项目待人工验收。检查范围仅 Release C#/XAML 编译；未启动程序、执行 COM 枚举或功能测试、发起网络探测/认证、修改真实配置或系统网络设置。校园登记、YAML 往返、界面交互、Wi-Fi/网线切换、TUN 排除、自动暂停恢复及手动登录均未验证。Windows 网络配置重建需重新登记，常见虚拟网卡名称过滤的实际覆盖由人工确认。正式运行目录 artifacts/V1.1 未替换，未提交、推送或发布。
+
+### 用户授权启动校园网络识别版本（2026-11-05）
+用户要求启动程序供人工测试。启动前未发现 cpu_net 进程，独立编译目录没有 config.yaml，未复制正式配置或凭据。Windows x64 / PowerShell 下通过 Start-Process 启动 C:\Projects\CPU_NET_Lite\artifacts\campus-network-recognition\cpu_net.exe，工作目录为同目录，无 --preview 参数。3 秒后进程 ID 32952 仍运行，窗口标题 CPU_NET_Lite，Responding=True，启动命令退出 0。运行可行性检查通过，其他项目待人工验收。范围仅启动和进程存活，网络识别、设置保存及认证仍待用户测试；正式运行目录未替换。
+
+### 改为连接流程自动识别，撤销登记设置（2026-11-05）
+
+用户明确要求直接修改连接逻辑，取消新增设置。主进程串行实现，无子进程。移除配置页全部校园网络登记控件和事件；撤销登记字典缓存复制。旧测试版配置字段保留只读入后丢弃的兼容入口，并在正常保存时省略，不读取或改写真实配置。此前异常详情修复、AGENTS.md 及 docs/history 成果保留。
+
+CampusNetworkService 在定时探测/手动及启动登录路径自动查询现有校园状态接口，取得有效认证 IPv4 后才继续后续流程。识别不到时停止该轮，自动重查按 30/60/120/240/300 秒退避，原定时循环到期后执行；手动可立即重查。本机网络配置/IPv4/网关或目标条件变化会重置退避，后续查询/提交前再次核对连接。首个已识别目标在同轮复用，避免重复状态查询并保持优先顺序及首选成功停止。旧增强模式及外网 Online 不重连规则保留。接口不可达只表示未检测到校园网络，不能区分实际校外、校园故障和 TUN 影响。详细设计见 DESIGN，README 已更新为自动流程。
+
+实际环境 Windows x64 / PowerShell / .NET SDK 10.0.403 / net10.0-windows，工作目录 C:\Projects\CPU_NET_Lite。设置 DOTNET_CLI_TELEMETRY_OPTOUT=1、DOTNET_GENERATE_ASPNET_CERTIFICATE=false、DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false。两次执行 dotnet build .\cpu_net.csproj -c Release --no-restore -o .\artifacts\automatic-campus-detection。首次退出 0，18 警告、0 错误，8.05 秒，日志 artifacts/build-automatic-campus-detection.log；完善暂停提示后最终编译退出 0，18 警告、0 错误，3.99 秒，日志 artifacts/build-automatic-campus-detection-final.log。没有编译错误，无运行错误修复记录。
+
+运行可行性检查通过，其他项目待人工验收。范围仅 Release C#/XAML 编译，未启动此版本、执行测试或主动发网络请求，未变更系统设置或正式运行文件。COM 枚举、YAML 旧字段兼容、Wi-Fi/有线切换、TUN 干扰、接口状态、退避恢复、账号认证及界面实际表现均未验证。未提交、推送或发布。
+
+### 自动记忆校园网络，未知网络停止重查（2026-11-05）
+
+用户明确授权按“自动记忆校园网络，其他网络暂停，网络变化后恢复识别”的方案修改。主进程串行完成，无子进程。保留已有 AGENTS.md、docs/history 和前序源码成果。修改 CampusNetworkService、MainViewModel、.gitignore、README 和 DESIGN，未恢复登记界面或新增设置。
+
+取消未知网络 30～300 秒退避重查。首次连接未知网络时识别一次，失败后停止自动校园查询和外网探测；同一连接的定时轮次直接返回。正常模式订阅 NetworkChange 地址/可用性通知，合并唤醒原循环，核对物理连接快照变化后允许新连接识别一次；退出解除订阅。手动登录可重查，重启后未知网络会识别一次。已记住校园网络的接口临时失败仍按原周期检查，避免因 TUN/接口故障把已知校园网络当成校外。
+
+有效校园状态响应后，根据认证 IPv4 唯一归属或单候选连接，自动将 Windows 网络配置 ID 保存到程序旁 campus-networks.json（GUID 数组，无凭据、IP 或名称）。多网卡来源不唯一时仅确认当前会话。文件惰性读取，临时文件加原子替换写入；损坏/不可读记录保留原样，保存失败不中断当前流程，当前会话可继续使用内存记忆。新增 .gitignore 条目忽略该运行数据，未实际创建用户记录文件。只涉及虚拟网络的通知且物理快照不变时，不重复探测暂停的未知网络；只修正 TUN 路由后可手动重新识别。
+
+实际环境 Windows x64 / PowerShell / .NET SDK 10.0.403 / net10.0-windows，工作目录 C:\Projects\CPU_NET_Lite。dotnet --version 返回 10.0.403。设置 DOTNET_CLI_TELEMETRY_OPTOUT=1、DOTNET_GENERATE_ASPNET_CERTIFICATE=false、DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false。执行 dotnet build .\cpu_net.csproj -c Release --no-restore -o .\artifacts\campus-network-memory，退出 0，18 警告、0 错误，6.51 秒。日志 artifacts/build-campus-network-memory.log。无编译错误及对应修复记录。
+
+运行可行性检查通过，其他项目待人工验收。范围仅 Release C#/XAML 编译；未启动程序、发送探测或认证、执行功能测试、读取或改写真实配置/校园记忆、修改系统网络或正式运行文件。COM 枚举、系统事件触发、自动学习归属、JSON 读写及异常分支、未知网络停止重查、Wi-Fi/网线切换、TUN 场景及认证仍未验证。恢复依赖系统通知，未产生地址/可用性通知的纯网络配置变化可由手动登录重查。未提交、推送或发布。
+
+### 自动绑定物理网卡，绕开 TUN 出口（2026-11-05）
+
+用户澄清目标为程序自动识别并绕开 TUN，仅使用电脑物理网卡。主进程串行实现，无子进程。新增 PhysicalNetworkService/PhysicalDnsMessage，修改 NetworkService、CampusConnectionService 和 ProbeDiagnostics 接入 HTTP/TCP/DNS 物理出口；移除上轮 CampusNetworkService、网络记忆及事件暂停门控，恢复原调度和登录入口。TunDetectionService 退回原名称判定实现，该旧检测类不参与新物理出口的判定。AGENTS.md、docs/history 和此前异常说明修复保留，旧用户文件均不改写。
+
+物理适配器通过 GetIfEntry2 硬件标志筛选，按 GetBestRoute2 的接口约束及路由前缀、路由/接口合计跃点选出口。socket 同时设置 IP_UNICAST_IF/IPV6_UNICAST_IF 和本地地址 Bind；没有物理出口或失败时不回退 TUN。探测域名用物理适配器 DNS，UDP/TCP 均绑定，支持 A/AAAA、压缩名称、CNAME 后续查询和截断转 TCP，贯通原 5 秒总时限/取消。每次 HTTP 连接重新选网卡，日志记录选中的接口及地址，保留认证 IP 来源校验、凭据/设置复读、串行限制及自动冷却。README/DESIGN 记录选路决策及 DNS/系统策略限制。保留 .gitignore 中旧记忆文件规则以保护遗留运行数据。
+
+环境 Windows x64 / PowerShell / .NET SDK 10.0.403 / net10.0-windows；dotnet --version 实际返回 10.0.403。工作目录 C:\Projects\CPU_NET_Lite。设置 DOTNET_CLI_TELEMETRY_OPTOUT=1、DOTNET_GENERATE_ASPNET_CERTIFICATE=false、DOTNET_ADD_GLOBAL_TOOLS_TO_PATH=false。
+
+运行命令均为 dotnet build .\cpu_net.csproj -c Release --no-restore -o .\artifacts\physical-nic-direct。首次退出 1，1 错误/9 警告，6.14 秒；错误为 PhysicalNetworkService.cs 使用 .NET 未公开的 SocketOptionName.UnicastInterface 命名项（CS0117），日志 artifacts/build-physical-nic-direct.log。根据 Windows SDK 将其改为 IP_UNICAST_IF/IPV6_UNICAST_IF 的值 31 后，重新编译退出 0，18 警告/0 错误，4.27 秒，日志 artifacts/build-physical-nic-direct-fixed.log。补齐 CNAME 后续解析、IPv6 回退及探测错误说明后最终编译退出 0，18 警告/0 错误，4.19 秒，日志 artifacts/build-physical-nic-direct-final.log，原编译错误消失。
+
+为防止 P/Invoke 结构偏移导致加载/调用错误，仅编译 artifacts/physical-nic-layout.cpp，在本机 SDK 上用 static_assert 核对所用结构的大小/偏移，未执行原生程序。实际命令如下，退出 0，日志 artifacts/build-physical-nic-layout.log。
+
+```powershell
+& 'C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64\cl.exe' /nologo /std:c++17 /c /I 'C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231\include' /I 'C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\shared' /I 'C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um' /I 'C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\ucrt' /Fo'.\artifacts\physical-nic-layout.obj' .\artifacts\physical-nic-layout.cpp
+```
+
+运行可行性检查通过，其他项目待人工验收。范围为 Release C#/XAML 编译和原生互操作布局编译，未执行程序、DNS/HTTP/认证请求、功能测试或任何系统网络变更。实际硬件枚举、接口绑定、物理 DNS、TLS、切网、多物理接口选路和 Clash Verge Rev TUN 场景均未验证；严格路由/WFP 策略仍可能阻断指定物理出口。DNS 使用物理网卡配置，系统 hosts/搜索后缀/NRPT/DoH 策略不参与。正式 artifacts/V1.1 未替换，未提交、推送或发布。
+
+### 校园门户识别与默认探测超时修复（2026-11-18）
+
+主进程串行完成。只读检查 artifacts/physical-nic-direct/Diagnostics 中保留的 20 份诊断。18 份为默认 Microsoft Connect Test 请求约 5 秒未收到响应头，已选 WLAN 出口。2 份为 HTTP 200 的校园认证页，静态跳转和认证链接均指向校园网主机的无参 /a79.htm。仅凭旧日志无法区分 TCP 建连和等待 HTTP 响应，也无法确定当时的 TUN 状态。诊断文件及已有用户修改保留。
+
+新增实测校园网模板匹配并复用原认证流程。默认外网探测未取得响应头时，可在同一轮 5 秒预算内使用微软 NCSI 备用地址。新增阶段与超时诊断归并，双失败留存两次诊断。Windows x64、PowerShell、.NET SDK 10.0.403、net10.0-windows，从 C:\Projects\CPU_NET_Lite 执行 dotnet build .\cpu_net.csproj -c Release --no-restore -o .\artifacts\probe-diagnostics-fix。退出 0，0 错误、18 警告，用时 11.05 秒。日志在 artifacts/build-probe-diagnostics-fix.log。无编译错误。
+
+运行可行性检查通过，其他项目待人工验收。范围仅 Release C#/XAML 编译。启动、物理网卡及 Clash TUN 下的 HTTP 探测、门户识别、切换备用地址、重连、认证与诊断实际写入均未验证。未替换正式版或测试中的旧程序。
+
+### V1.2 版本提交与推送（2026-11-18）
+
+用户人工确认当前版本，并授权保存及推送新版本。主进程串行执行。工程版本设为 1.2.0，拟将本轮源码及相关文档提交至 master，并推送 origin/master 和新标签 v1.2。操作前核实 origin 为 Halfaustus/cpu_net_lite，远端 master 为 20717b8，远端最新标签为 v1.1。既有工作区规范及其历史快照、AX18 归档、真实配置、诊断和构建输出不纳入此次提交。远端结果见交付记录。
+
+Windows x64、PowerShell、.NET SDK 10.0.403、net10.0-windows，从 C:\Projects\CPU_NET_Lite 执行 dotnet build .\cpu_net.csproj -c Release --no-restore -o .\artifacts\V1.2。退出 0，0 错误、18 警告，用时 5.08 秒。日志在 artifacts/build-v1.2.log。运行可行性检查通过，其他项目待人工验收。范围仅 Release C#/XAML 编译，本轮未启动或执行网络探测、TUN、重连、认证、配置及界面路径。V1.2 独立输出，未部署、更新正式运行目录或创建 GitHub Release。

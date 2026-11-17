@@ -3,6 +3,7 @@
 /openwrt/
 /OpenWrt.txt
 **/config.yaml
+**/campus-networks.json
 **/Config.json
 **/settings.json
 **/ErrorLog/

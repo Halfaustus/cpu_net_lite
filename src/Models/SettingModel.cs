@@ -1,14 +1,15 @@
 using cpu_net.ViewModel.Base;
 using System;
 using System.IO;
+using System.Collections.Generic;
+using cpu_net.Constants;
+using YamlDotNet.Serialization;
 using cpu_net.Services;
 
 namespace cpu_net.Model
 {
     public class SettingModel : ViewModelBase
     {
-        private const string DefaultTestUrl = "http://www.msftconnecttest.com/connecttest.txt";
-        private const string DefaultTestCode = "Microsoft Connect Test";
 
         private readonly string _settingDataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.yaml");
 
@@ -186,15 +187,22 @@ namespace cpu_net.Model
             set => SetProperty(ref _enhancedMode, value);
         }
 
+        // 仅兼容上一测试版配置，读取后丢弃；保存时不输出这两个已撤销字段。
+        [YamlMember(DefaultValuesHandling = DefaultValuesHandling.OmitDefaults)]
+        public bool CampusNetworkRecognitionEnabled { get => false; set { } }
+
+        [YamlMember(DefaultValuesHandling = DefaultValuesHandling.OmitNull)]
+        public Dictionary<string, string>? CampusNetworks { get => null; set { } }
+
         public string TestUrl
         {
-            get => _testUrl ?? DefaultTestUrl;
+            get => _testUrl ?? NetworkConstants.DefaultProbeUrl;
             set => SetProperty(ref _testUrl, value);
         }
 
         public string TestCode
         {
-            get => _testCode ?? DefaultTestCode;
+            get => _testCode ?? NetworkConstants.DefaultProbeBody;
             set => SetProperty(ref _testCode, value);
         }
 

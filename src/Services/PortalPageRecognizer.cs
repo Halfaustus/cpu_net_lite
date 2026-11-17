@@ -20,6 +20,39 @@ namespace cpu_net.Services
             """<a\s+href\s*=\s*(?:"(?<url>[^"<>]+)"|'(?<url>[^'<>]+)')\s*>\s*here\s*</a\s*>""",
             HtmlOptions, MatchTimeout);
 
+        // 实测校园网模板同时包含静态跳转和认证提示链接，两者均指向固定入口。
+        public static bool IsKnownCampusPage(string body)
+        {
+            try
+            {
+                string html = Comments.Replace(body, "");
+                if (!HasAuthenticationPrompt(html)) return false;
+                bool hasRedirect = false;
+                foreach (Match match in Script.Matches(html))
+                {
+                    if (!IsCampusEntry(match.Groups["url"].Value)) return false;
+                    hasRedirect = true;
+                }
+                if (!hasRedirect) return false;
+                bool hasLink = false;
+                foreach (Match match in Link.Matches(html))
+                {
+                    if (!IsCampusEntry(WebUtility.HtmlDecode(match.Groups["url"].Value))) return false;
+                    hasLink = true;
+                }
+                return hasLink;
+            }
+            catch (RegexMatchTimeoutException) { return false; }
+        }
+
+        private static bool IsCampusEntry(string text)
+            => string.Equals(text, new Uri(NetworkConstants.CpuDrComUrl).GetLeftPart(UriPartial.Authority) + "/a79.htm",
+                StringComparison.Ordinal);
+
+        private static bool HasAuthenticationPrompt(string html)
+            => html.Contains("Authentication is required.", StringComparison.OrdinalIgnoreCase) &&
+                html.Contains("to open the authentication page.", StringComparison.OrdinalIgnoreCase);
+
         public static bool IsKnownDormitoryPage(string body)
         {
             try
@@ -28,8 +61,7 @@ namespace cpu_net.Services
                 foreach (Match match in Script.Matches(html))
                     if (IsKnownPortalUrl(match.Groups["url"].Value)) return true;
 
-                if (!html.Contains("Authentication is required.", StringComparison.OrdinalIgnoreCase) ||
-                    !html.Contains("to open the authentication page.", StringComparison.OrdinalIgnoreCase)) return false;
+                if (!HasAuthenticationPrompt(html)) return false;
                 foreach (Match match in Link.Matches(html))
                     if (IsKnownPortalUrl(WebUtility.HtmlDecode(match.Groups["url"].Value))) return true;
             }

@@ -373,7 +373,7 @@ namespace cpu_net.ViewModel
                 if (outcome == LoginAttemptOutcome.AlreadyOnline) return 2;
             }
             Info(foundTarget ? "本轮可用网络均未确认登录成功，请查看各次认证记录。"
-                : "无法确认校园认证 IP，本次未认证；可检查 TUN 中校园认证地址的直连/路由排除配置。");
+                : "无法通过物理网卡确认校园认证 IP，本次未认证；请确认已接入校园网络并查看请求错误。");
             return 0;
         }
 
@@ -435,7 +435,7 @@ namespace cpu_net.ViewModel
             }
             catch (Exception e)
             {
-                Info($"登录请求失败：{(e is InvalidOperationException ? e.Message : NetworkService.DescribeFailure(e))}");
+                Info($"登录请求失败：{NetworkService.DescribeFailure(e)}");
                 return LoginAttemptOutcome.Failed;
             }
         }

@@ -5,6 +5,10 @@ namespace cpu_net.Constants
     /// </summary>
     public static class NetworkConstants
     {
+        public const string DefaultProbeUrl = "http://www.msftconnecttest.com/connecttest.txt";
+        public const string DefaultProbeBody = "Microsoft Connect Test";
+        public const string BackupProbeUrl = "http://www.msftncsi.com/ncsi.txt";
+        public const string BackupProbeBody = "Microsoft NCSI";
 
         // DrCOM 状态查询
         public const string DrComCallback = "dr1002";

@@ -18,15 +18,48 @@ namespace cpu_net.Services
 
     public static class CampusConnectionService
     {
-        private static readonly HttpClient ProbeClient = new HttpClient(new HttpClientHandler
-        {
-            UseProxy = false,
-            AllowAutoRedirect = false
-        }) { Timeout = TimeSpan.FromSeconds(5) };
+        private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan PrimaryProbeTimeout = TimeSpan.FromMilliseconds(2500);
+        private static readonly HttpClient ProbeClient = new(PhysicalNetworkService.CreateHandler())
+            { Timeout = Timeout.InfiniteTimeSpan };
 
         public static async Task<InternetProbeResult> ProbeInternetAsync(
             string url, string expectedBody, Action<string> report, CancellationToken cancellationToken = default,
             Action<string, string, string>? diagnostic = null)
+        {
+            void Publish(string key, string reason, string detail)
+            {
+                if (diagnostic != null) diagnostic(key, reason, detail);
+                else report(ProbeDiagnostics.Save(reason, detail));
+            }
+
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(ProbeTimeout);
+            if (url != NetworkConstants.DefaultProbeUrl || expectedBody != NetworkConstants.DefaultProbeBody)
+                return (await ProbeAttemptAsync(url, expectedBody, report, cancellationToken, deadline.Token, Publish)).Result;
+
+            (string Key, string Reason, string Detail)? primaryFailure = null;
+            using var primaryDeadline = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+            primaryDeadline.CancelAfter(PrimaryProbeTimeout);
+            var primary = await ProbeAttemptAsync(url, expectedBody, report, cancellationToken, primaryDeadline.Token,
+                (key, reason, detail) => primaryFailure = (key, reason, detail), deadline.Token);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!primary.CanFallback || deadline.IsCancellationRequested || primaryFailure is not { } failure)
+            {
+                if (primaryFailure is { } saved) Publish(saved.Key, saved.Reason, saved.Detail);
+                return primary.Result;
+            }
+
+            var backup = await ProbeAttemptAsync(NetworkConstants.BackupProbeUrl, NetworkConstants.BackupProbeBody,
+                report, cancellationToken, deadline.Token, (key, reason, detail) =>
+                    Publish(failure.Key + key, $"默认探测与备用探测均未确认外网可达（{reason}）",
+                        $"默认探测\n{failure.Detail}\n\n备用探测\n{detail}"));
+            return backup.Result;
+        }
+
+        private static async Task<(InternetProbeResult Result, bool CanFallback)> ProbeAttemptAsync(
+            string url, string expectedBody, Action<string> report, CancellationToken cancellationToken,
+            CancellationToken attemptToken, Action<string, string, string> diagnostic, CancellationToken bodyToken = default)
         {
             var started = DateTimeOffset.Now;
             var timer = System.Diagnostics.Stopwatch.StartNew();
@@ -35,14 +68,23 @@ namespace cpu_net.Services
             string? body = null;
             string locationText = "无";
             string mediaType = "未收到响应";
-            void Report(string reason, string? failure = null)
+            string physicalRoute = "尚未选择物理出口";
+            string phase = "选择物理出口或解析 DNS";
+            void Report(string reason, string? failure = null, bool timedOut = false)
             {
-                string metadata = $"检测地址={ProbeDiagnostics.Address(probeUri)}\nHTTP={(response == null ? "未收到响应" : ((int)response.StatusCode).ToString())}\nContent-Type={mediaType}\nLocation={locationText}\n正文长度={(body == null ? "未知（未取得完整正文）" : body.Length + " 字符")}\n原因={reason}\n异常={failure ?? "无"}";
-                string stable = System.Text.Json.JsonSerializer.Serialize(new { metadata, body });
+                string address = ProbeDiagnostics.Address(probeUri);
+                int? statusCode = (int?)response?.StatusCode;
+                string failurePhase = Volatile.Read(ref phase);
+                string metadata = $"检测地址={address}\n物理出口={Volatile.Read(ref physicalRoute)}\n阶段={failurePhase}\nHTTP={statusCode?.ToString() ?? "未收到响应"}\nContent-Type={mediaType}\nLocation={locationText}\n正文长度={(body == null ? "未知（未取得完整正文）" : body.Length + " 字符")}\n原因={reason}\n异常={failure ?? "无"}";
+                // 地址轮换及取消异常包装只影响完整诊断，不拆分同一种超时。
+                string stable = JsonSerializer.Serialize(new
+                {
+                    address, statusCode, mediaType, locationText, body, reason, failurePhase,
+                    failure = timedOut ? null : failure
+                });
                 string key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(stable)));
                 string detail = $"检测时间={started:yyyy-MM-dd HH:mm:ss.fff zzz}\n{metadata}\n耗时={timer.ElapsedMilliseconds} ms\n保留策略=最近{ProbeDiagnostics.RetainedFileCount}份；超出删除最旧文件\n完整响应正文（未脱敏、不截断）：\n{body ?? "[未取得正文]"}";
-                if (diagnostic != null) diagnostic(key, reason, detail);
-                else report(ProbeDiagnostics.Save(reason, detail));
+                diagnostic(key, reason, detail);
             }
             try
             {
@@ -50,34 +92,49 @@ namespace cpu_net.Services
                     (probeUri.Scheme != Uri.UriSchemeHttp && probeUri.Scheme != Uri.UriSchemeHttps))
                 {
                     Report("检测地址格式无效，未发送请求");
-                    return new InternetProbeResult(InternetProbeState.Unknown);
+                    return (new(InternetProbeState.Unknown), false);
                 }
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(TimeSpan.FromSeconds(5));
-                response = await ProbeClient.GetAsync(probeUri, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+                using var request = new HttpRequestMessage(HttpMethod.Get, probeUri);
+                request.Options.Set(PhysicalNetworkService.RouteReportKey, description =>
+                {
+                    Volatile.Write(ref physicalRoute, description);
+                    if (description.StartsWith("物理出口：", StringComparison.Ordinal))
+                        Volatile.Write(ref phase, "建立 TCP 连接");
+                });
+                request.Options.Set(PhysicalNetworkService.TcpConnectedKey,
+                    () => Volatile.Write(ref phase, "TCP 已连接，等待 HTTP 响应头"));
+                response = await ProbeClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, attemptToken);
+                Volatile.Write(ref phase, "读取 HTTP 正文");
                 mediaType = response.Content.Headers.ContentType?.ToString() ?? "未提供";
                 var location = response.Headers.Location;
                 Uri? destination = null;
                 if (location != null) Uri.TryCreate(probeUri, location, out destination);
                 if (response.Headers.TryGetValues("Location", out var locations)) locationText = string.Join("\n", locations);
                 string? bodyFailure = null;
-                try { body = await response.Content.ReadAsStringAsync(timeout.Token); }
+                try { body = await response.Content.ReadAsStringAsync(bodyToken.CanBeCanceled ? bodyToken : attemptToken); }
                 catch (Exception ex) when (!response.IsSuccessStatusCode && !cancellationToken.IsCancellationRequested)
                 {
                     // 非成功响应原先只依赖状态码和Location；诊断读取失败不改变门户判定。
                     bodyFailure = ProbeDiagnostics.Failure(ex);
                 }
                 if (response.IsSuccessStatusCode && body!.Trim() == expectedBody)
-                    return new InternetProbeResult(InternetProbeState.Online);
+                    return (new(InternetProbeState.Online), false);
 
                 int status = (int)response.StatusCode;
                 if (status == 200 && body != null &&
-                    string.Equals(response.Content.Headers.ContentType?.MediaType, "text/html", StringComparison.OrdinalIgnoreCase) &&
-                    PortalPageRecognizer.IsKnownDormitoryPage(body))
+                    string.Equals(response.Content.Headers.ContentType?.MediaType, "text/html", StringComparison.OrdinalIgnoreCase))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    report("检测到已知宿舍网认证页面（HTTP 200 正文跳转）");
-                    return new InternetProbeResult(InternetProbeState.CampusPortal, 0);
+                    if (PortalPageRecognizer.IsKnownCampusPage(body))
+                    {
+                        report("检测到已知校园网认证页面（HTTP 200 正文跳转）");
+                        return (new(InternetProbeState.CampusPortal, 1), false);
+                    }
+                    if (PortalPageRecognizer.IsKnownDormitoryPage(body))
+                    {
+                        report("检测到已知宿舍网认证页面（HTTP 200 正文跳转）");
+                        return (new(InternetProbeState.CampusPortal, 0), false);
+                    }
                 }
                 if ((status == 301 || status == 302 || status == 303 || status == 307 || status == 308) &&
                     destination != null && (destination.Scheme == Uri.UriSchemeHttp || destination.Scheme == Uri.UriSchemeHttps))
@@ -85,12 +142,12 @@ namespace cpu_net.Services
                     if (destination.Host == new Uri(NetworkConstants.BroadbandDrComUrl).Host)
                     {
                         report("检测到已知宿舍网认证页面（HTTP 重定向）");
-                        return new InternetProbeResult(InternetProbeState.CampusPortal, 0);
+                        return (new(InternetProbeState.CampusPortal, 0), false);
                     }
                     if (destination.Host == new Uri(NetworkConstants.CpuDrComUrl).Host)
                     {
                         Report("已知校园网认证跳转", bodyFailure);
-                        return new InternetProbeResult(InternetProbeState.CampusPortal, 1);
+                        return (new(InternetProbeState.CampusPortal, 1), false);
                     }
                 }
                 Report($"HTTP {status}，正文或跳转不符合联网判定", bodyFailure);
@@ -98,10 +155,14 @@ namespace cpu_net.Services
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
-                Report(ProbeDiagnostics.BriefFailure(ex), ProbeDiagnostics.Failure(ex));
+                cancellationToken.ThrowIfCancellationRequested();
+                bool timedOut = attemptToken.IsCancellationRequested || bodyToken.IsCancellationRequested;
+                Report(timedOut ? "探测请求超时" : ProbeDiagnostics.BriefFailure(ex), ProbeDiagnostics.Failure(ex), timedOut);
+                return (new(InternetProbeState.Unknown), response == null &&
+                    (timedOut || ex is HttpRequestException { InnerException: not PhysicalNetworkException }));
             }
             finally { response?.Dispose(); }
-            return new InternetProbeResult(InternetProbeState.Unknown);
+            return (new(InternetProbeState.Unknown), false);
         }
         public static IEnumerable<CampusLoginTarget> ResolveTargets(int preferredNetwork, Action<string> report,
             int? detectedPortalMode = null, bool includeDormitory = true, CancellationToken cancellationToken = default)
@@ -153,7 +214,7 @@ namespace cpu_net.Services
             catch (Exception ex)
             {
                 // 不输出原始响应及 JSON 片段，状态查询中可能带有身份信息。
-                report($"{label}状态查询失败：{NetworkService.DescribeFailure(ex)}；请检查校园连接及认证地址的 TUN 路由排除。");
+                report($"{label}状态查询失败：{NetworkService.DescribeFailure(ex)}；请确认物理网卡已接入校园网络。");
             }
             return null;
         }

@@ -12,13 +12,15 @@ namespace cpu_net.Services
     /// <summary>校园状态查询与认证请求；总超时覆盖响应头及完整正文。</summary>
     public static class NetworkService
     {
-        private static readonly HttpClient CampusClient = new(new HttpClientHandler
+        // 仅此类型的消息由本服务构造，可安全展示；不放行任意异常的原始Message。
+        private sealed class CampusRequestFailureException : Exception
         {
-            UseProxy = false,
-            UseCookies = false,
-            AllowAutoRedirect = false,
-            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
-        }) { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
+            public CampusRequestFailureException(string description) : base(description) { }
+        }
+
+        private static readonly HttpClient CampusClient = new(PhysicalNetworkService.CreateHandler(
+            DecompressionMethods.GZip | DecompressionMethods.Deflate))
+            { Timeout = System.Threading.Timeout.InfiniteTimeSpan };
 
         // 保留现有工作线程调用接口，不引入额外认证并发或隐含重试。
         public static string HttpGetRequest(string url, Action<string>? diagnostic = null, string operationName = "认证",
@@ -31,18 +33,23 @@ namespace cpu_net.Services
             cancellationToken.ThrowIfCancellationRequested();
             var endpoint = new Uri(url).GetLeftPart(UriPartial.Path);
             var timer = Stopwatch.StartNew();
-            diagnostic?.Invoke($"{operationName}请求：{endpoint}；直连；总超时 5000 ms");
+            diagnostic?.Invoke($"{operationName}请求：{endpoint}；仅物理网卡；总超时 5000 ms");
             using var deadline = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(TimeSpan.FromSeconds(5));
             int? status = null;
+            string phase = "等待响应头";
+            CampusRequestFailureException Failure(string reason, string exceptionType) => new(
+                $"{operationName}：{reason}；阶段={phase}；HTTP={status?.ToString() ?? "未收到响应头"}；异常={exceptionType}；耗时 {timer.ElapsedMilliseconds} ms");
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                if (diagnostic != null) request.Options.Set(PhysicalNetworkService.RouteReportKey, diagnostic);
                 using var response = await CampusClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
                     deadline.Token).ConfigureAwait(false);
                 status = (int)response.StatusCode;
                 if (!response.IsSuccessStatusCode)
-                    throw new InvalidOperationException($"{endpoint}；直连；HTTP {status}；请求未成功（不跟随重定向）；耗时 {timer.ElapsedMilliseconds} ms");
+                    throw Failure("HTTP状态非成功（不跟随重定向）", "HTTP状态错误");
+                phase = "读取响应正文";
                 using var stream = await response.Content.ReadAsStreamAsync(deadline.Token).ConfigureAwait(false);
                 using var reader = new StreamReader(stream, Encoding.UTF8);
                 string content = await reader.ReadToEndAsync(deadline.Token).ConfigureAwait(false);
@@ -51,30 +58,37 @@ namespace cpu_net.Services
                 return content;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException ex)
             {
-                throw new InvalidOperationException($"{operationName}请求总超时（5000 ms，含正文读取）；HTTP={status?.ToString() ?? "未收到响应"}；耗时 {timer.ElapsedMilliseconds} ms");
+                throw Failure("请求总超时（5000 ms，含正文读取）", ex.GetType().Name);
             }
             catch (HttpRequestException ex)
             {
+                if (ex.InnerException is PhysicalNetworkException physical)
+                    throw Failure(physical.Message, physical.GetType().Name);
                 // 不输出原始异常Message或完整认证URL。
-                throw new InvalidOperationException($"{operationName}请求失败：{DescribeFailure(ex)}；耗时 {timer.ElapsedMilliseconds} ms");
+                throw Failure($"HTTP请求失败（{ex.HttpRequestError}）" +
+                    (ex.InnerException is SocketException socket ? $"；Socket={socket.SocketErrorCode}" : ""), ex.GetType().Name);
             }
             catch (IOException) when (cancellationToken.IsCancellationRequested)
             {
                 throw new OperationCanceledException(cancellationToken);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
-                throw new InvalidOperationException($"{operationName}响应读取失败；HTTP={status?.ToString() ?? "未收到响应"}；耗时 {timer.ElapsedMilliseconds} ms");
+                throw Failure(deadline.IsCancellationRequested ? "请求总超时（5000 ms，含正文读取）" :
+                    $"响应读取失败（HResult=0x{ex.HResult:X8}）", ex.GetType().Name);
             }
         }
         public static string DescribeFailure(Exception exception)
         {
+            if (exception is CampusRequestFailureException failure) return failure.Message;
+            if (exception is PhysicalNetworkException physical) return physical.Message;
             if (exception is OperationCanceledException)
                 return "请求超时或被取消（检测超时设置为 5 秒）";
             if (exception is HttpRequestException http)
             {
+                if (http.InnerException is PhysicalNetworkException physicalFailure) return physicalFailure.Message;
                 string reason = http.HttpRequestError switch
                 {
                     HttpRequestError.NameResolutionError => "DNS 解析失败：检查测试域名及 DNS 配置",

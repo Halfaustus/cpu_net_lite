@@ -1,10 +1,10 @@
-# CPU_NET_Lite V1.1 当前设计
+# CPU_NET_Lite V1.2 当前设计
 
 2026-10-27，用户已确认当前功能正常，授权整理唯一最终工程、设为V1.0、保存本地Git并推送origin。主进程执行，不使用子进程，不引入新功能；CLI、一键安装、凭据存储迁移及依赖替换继续冻结。
 
 ## 工程边界
 
-主工程cpu_net.csproj，解决方案cpu_net.sln，仅包含WPF主应用，版本1.1.0，net10.0-windows。App/Program负责入口与单实例；MainWindow负责窗口/电源；配置页负责设置保存；MainViewModel负责调度和认证协调；CampusConnectionService/NetworkService负责外网探测、认证IP和校园接口；SettingsStore负责YAML缓存及原子替换；LoggingService负责日志。历史回归代码保留原断言，目标框架统一net10.0，不自动执行功能验收。
+主工程cpu_net.csproj，解决方案cpu_net.sln，仅包含WPF主应用，版本1.2.0，net10.0-windows。App/Program负责入口与单实例；MainWindow负责窗口/电源；配置页负责设置保存；MainViewModel负责调度和认证协调；CampusConnectionService/NetworkService负责外网探测、认证IP和校园接口；SettingsStore负责YAML缓存及原子替换；LoggingService负责日志。历史回归代码保留原断言，目标框架统一net10.0，不自动执行功能验收。
 
 旧安装器/卸载器工程、发布配置、用户IDE文件、旧图片和阶段构建移入本地忽略的.local-archive/pre-v1.0，历史配置日志随原目录保留，不上传。OpenWrt相关内容保持原位置并忽略。默认项目扫描明确排除归档、artifacts、OpenWrt和测试目录。
 
@@ -69,3 +69,47 @@ ResolveTargets仍按PreferredNetwork排序、逐个访问状态接口确认设�
 
 ### V1.1正式提交与推送（2026-10-29）
 用户授权将当前修正正式作为1.1提交推送，并在完成后清理旧版本。本条覆盖此前仅本地归档、不推送和不替换V1.1的阶段限制。保持版本1.1.0，沿用master；已核对origin/master仍为51653e1、远端不存在v1.1，允许更新本地v1.1到最终提交后正常推送，不强推。发布先输出artifacts/v1.1-release，推送后更新artifacts/V1.1程序文件，保留原配置/日志/诊断；旧程序及阶段输出归档。无进程运行，不自动启动。前两项修正仅经编译，后两项潜在局限不变；其他计划冻结。
+
+### 状态查询具体异常说明修复（2026-11-04）
+用户日志显示两个状态接口约5秒后仅报InvalidOperationException。只读定位确认：NetworkService原先将超时/HTTP/读取失败转换为带安全说明的InvalidOperationException，但ReadTarget经DescribeFailure处理后仅留下类型名。本次用户授权修复这一信息丢失，不推断实际网络故障原因。
+NetworkService增加私有CampusRequestFailureException，仅该类型可由DescribeFailure显示本服务构造的说明；记录操作、等待响应头/读取正文阶段、实际已取得的HTTP状态或未收到响应头、原始异常类型/结构化网络原因及耗时。HTTP非成功单独标明；正文IO异常在总时限已取消时按超时记录。外部取消继续传播，5秒限制及认证IP保护不变。不输出任意异常Message、认证查询参数或原始响应。
+认证失败提示统一使用DescribeFailure，去掉任意InvalidOperationException直接显示Message的分支；状态查询与认证均保留安全说明。仅编译到artifacts/request-error-detail，未更新正式运行目录；实际超时/HTTP错误/读取失败提示待人工验收。
+
+### 自动校园网络记忆与事件恢复（历史方案，已被下文物理出口方案替代）
+
+用户要求直接修改连接逻辑并明确采用自动记忆校园网络、校外停止重查、网络变化时恢复的方案。当前工作包由主进程串行完成，范围为 CampusNetworkService、MainViewModel、运行状态文件忽略规则及对应说明，复用现有 CampusConnectionService。输入为现有校园状态接口及本机网络信息，输出为自动学习、未知网络暂停和原认证流程。Design Ready / Dev Ready，无新增依赖，检查限定 Windows x64 Release C#/XAML 编译，实际识别、切网及 TUN 共存由人工验收。已撤销的登记界面和开关继续保持撤销状态。
+
+定时流程在外网探测前按原优先顺序查询校园状态接口，取得首个有效认证 IPv4 后继续原外网状态判定；外网 Online 仍不触发自动登录，CampusPortal 或启用增强模式后的 Unknown 沿原规则登录。有效状态响应是校园网络识别依据，本机网络配置 ID 不再作为登记名单。首个已识别目标在同轮传入认证流程，避免重复查询，也不重查识别期间已不可用的高优先目标；首个目标认证成功/已在线即结束，只有其认证失败才继续原顺序查询下个目标。无运营商仍跳过宿舍目标。
+
+首次遇到未知网络时按原顺序识别一次，没有可用目标则标记该连接已尝试，停止后续自动校园查询、外网探测和认证，不再运行 30/60/120/240/300 秒退避。暂停后定时循环只维持配置读取，识别服务在没有网络事件、目标条件变化或手动强制时直接返回，不再枚举网络。网络事件会先重读物理连接快照，快照未变且已尝试的未知网络继续暂停；快照确实变化时允许新连接识别一次。无可用物理连接同样等待事件。本机信息暂不可读时仅按原间隔重试本地读取，不发送校园请求。手动登录始终可重新识别；重启程序后未知连接会获得一次新的识别机会。接口失败只说明尚未确认为校园网，不推断确定的校外地理位置。
+
+NLM 网络配置 ID、适配器 ID、本地 IPv4 和网关构成本机连接快照，用来识别连接变化与丢弃过期结果。复用已知 TUN 名称判定，过滤常见虚拟适配器；名称过滤不保证识别所有第三方虚拟适配器。MainViewModel 正常模式订阅 NetworkChange.NetworkAddressChanged/NetworkAvailabilityChanged，事件只增加版本号并唤醒原调度循环，不直接发送请求；退出时解除订阅。多次事件由容量为 1 的信号合并，同一物理快照的虚拟网络事件不会重启未知网络的 HTTP 查询。识别期间连接变化则丢弃结果。每个后续目标查询前和认证提交前再次核对连接，发送前继续读取最新凭据和设置，保留原 5 秒总时限及取消。已识别目标超过 15 秒或目标顺序/运营商条件变化时重新识别。未识别到校园网络的流程不更新自动登录冷却；实际进入认证轮次仍共享串行限制和 30 秒自动冷却。状态提示只在变化时记录，识别失败的该次详细请求说明随状态变化输出。
+
+校园状态接口提供有效认证 IP，且识别前后连接快照一致时自动学习。优先将认证 IP 与物理适配器 IPv4 对应，能够唯一对应网络配置 ID 时记忆该 ID；只有一个候选网络配置时允许接入网 NAT。多网络且来源无法唯一确定时只确认当前会话，不持久化任何候选 ID。正向记忆保存在程序旁 campus-networks.json（GUID 数组），不含账号、密码、IP、网关或网络名称，已加入 .gitignore。惰性加载，无记录时首次识别；写入使用同目录临时文件后原子替换。文件读取失败保留原文件，本进程只在内存学习；保存失败同样保留内存识别，失败不会中断当前认证。该应用正常模式已有单实例互斥，本服务内部由信号量串行化读取/学习。未知网络的失败状态仅保留在内存。
+
+任何活动物理连接的配置 ID 已被记住，或完整快照已在本会话确认时，继续原周期识别，即使接口临时失败也不将该连接判为校外。Windows 重建配置、移动程序目录未带上记录文件时重新学习。只修改 TUN 路由且物理快照不变时，已暂停的未知网络需要手动登录重查。网络变化恢复依赖系统通知，未发出地址/可用性通知的纯配置标识变化可通过手动登录重新识别。
+
+登记界面、开关及登记字典快照逻辑已撤销。SettingModel 仅保留两个旧测试版字段的兼容入口，读入后丢弃，序列化时省略，避免已经保存过登记的测试配置变成不可读配置。既有真实配置保持原样，未执行迁移。预览模式继续不执行自动任务。
+
+官方接口依据为 [INetwork::GetNetworkId](https://learn.microsoft.com/en-us/windows/win32/api/netlistmgr/nf-netlistmgr-inetwork-getnetworkid)、[INetworkConnection::GetAdapterId](https://learn.microsoft.com/en-us/windows/win32/api/netlistmgr/nf-netlistmgr-inetworkconnection-getadapterid)、[NetworkChange](https://learn.microsoft.com/en-us/dotnet/api/system.net.networkinformation.networkchange?view=net-10.0) 及本机 Windows SDK 10.0.26100.0 的 netlistmgr.h。本次仅编译到 artifacts/campus-network-memory，COM 枚举、旧测试配置兼容、记忆文件读写、Wi-Fi/网线识别、系统网络事件、认证和 TUN 下暂停恢复均待人工验证。
+
+### 请求自动绑定物理网卡（2026-11-05，当前方案）
+
+用户明确目标为程序自动绕开 TUN、仅使用物理网卡。当前工作包由主进程串行实现，范围为 PhysicalNetworkService、PhysicalDnsMessage、NetworkService、CampusConnectionService、ProbeDiagnostics，以及移除前一方案的 CampusNetworkService 和 MainViewModel 识别/记忆门控。输入为 Windows 活动硬件接口与只读路由信息，输出为绑定物理接口的 DNS/TCP 流。无新增设置或依赖。Design Ready / Dev Ready，运行检查限 Windows x64 Release 编译及 Windows SDK 原生结构布局编译，具体 TUN 下行为由人工验收。
+
+PhysicalNetworkService 创建共用 SocketsHttpHandler 配置，用 ConnectCallback 接管探测、状态查询及认证的建连。读取 GetIfEntry2 的 HardwareInterface/FilterInterface 标志，只接受活动硬件且具有可用地址的接口，不依赖适配器名称判断物理性。对每个目标分别在候选物理接口上调用 GetBestRoute2，并通过 GetIpInterfaceEntry 读取接口跃点；按最长前缀、路由与接口合计跃点、接口索引排序，选择一个出口。IPv4 使用网络字节序的 IP_UNICAST_IF，IPv6 使用主机字节序的 IPV6_UNICAST_IF，同时 Bind 到原生 API 选出的该卡源地址。找不到出口或建连失败时返回错误，不回退默认/TUN 出口，不重试其他物理接口。每次 HTTP 请求重建连接并重新选路，保持原 HTTP/TLS 主机名和证书验证。
+
+域名探测不使用系统 DNS 缓存或默认出口解析，以防沿用 TUN 的 Fake-IP。选择物理适配器配置且在该接口可达的 DNS 服务器，按物理路由合计跃点选首个出口。UDP 查询与 TC 截断后的 TCP 查询均复用接口/源地址绑定，支持标准压缩域名、IDN、A/AAAA 及最多 8 次 CNAME 后续查询；优先 A，没有可路由 A 时再查询 AAAA。该解析器用于 HTTP 主机地址解析，不实现系统 hosts、搜索后缀、NRPT/DoH 策略或 DNS 缓存。全部操作贯通原请求取消和 5 秒总时限；没有 HTTP/认证隐含重试。直接 IP 的两个校园端点无需 DNS。
+
+校园请求日志增加“物理出口”及网卡名、接口索引、本地和目标 IP；探测诊断增加物理出口元数据，界面保留原简短提示和诊断路径策略。只允许本服务构造的 PhysicalNetworkException 原因出现在普通日志，其他异常继续使用结构化安全描述。恢复原外网探测和串行认证入口、优先顺序、自动 30 秒冷却、增强模式、发送前最新配置及状态接口认证 IP 校验。删除网络记忆服务及事件门控，不读取或删除旧 campus-networks.json；.gitignore 仍忽略旧运行数据。旧测试版登记配置字段继续兼容，界面没有登记开关。
+
+该方案指定应用 socket 的物理出站接口，不修改系统代理、路由、网卡或防火墙。严格路由/WFP/其他系统策略仍可能阻断连接，能否在用户当前 Clash Verge Rev TUN 配置下实际完成请求尚未验证。多张物理网卡都只有默认路由时，按跃点自动选择，无法凭接口类型知道哪张接入校园。外部浏览器打开的自助服务页由浏览器自行处理网络。
+
+原生结构使用本机 Windows SDK 10.0.26100.0 netioapi.h 的 x64 布局，编译期 static_assert 核对 MIB_IF_ROW2、MIB_IPINTERFACE_ROW、MIB_IPFORWARD_ROW2、SOCKADDR_INET 的大小及使用字段偏移。官方依据为 [Windows 出站接口选项](https://learn.microsoft.com/en-us/windows/win32/winsock/ipproto-ip-socket-options)、[GetBestRoute2](https://learn.microsoft.com/en-us/windows/win32/api/netioapi/nf-netioapi-getbestroute2)、[MIB_IF_ROW2](https://learn.microsoft.com/en-us/windows/win32/api/netioapi/ns-netioapi-mib_if_row2)、[ConnectCallback](https://learn.microsoft.com/en-us/dotnet/api/system.net.http.socketshttphandler.connectcallback) 和 [DNS 报文及传输规范](https://www.rfc-editor.org/rfc/rfc1035)。本次输出 artifacts/physical-nic-direct，实际网卡枚举、选路、socket 选项、DNS、TLS、认证、切网及 Clash TUN 场景待人工验证。
+### 校园门户识别与默认探测超时处理（2026-11-18）
+
+本工作包由主进程完成，修改范围是门户识别、默认外网探测和诊断。依据为物理网卡测试版保留的 20 份诊断，其中 18 份为默认探测约 5 秒未收到响应头，2 份为 HTTP 200 的校园网认证页。日志显示已解析目标并选择 WLAN，旧记录无法区分 TCP 建连和建连后等待 HTTP，也没有证据可确定超时由 TUN 造成。
+
+HTTP 200 的 HTML 同时包含已知认证提示、静态跳转及链接，且两者均精确指向无查询参数的校园网入口 `http://192.168.199.21/a79.htm` 时，按校园门户处理。沿用状态接口确认认证 IP 和用户设置的认证顺序。原宿舍网模板保持独立。
+
+默认探测在 2.5 秒内未收到响应头并超时，或此前遇到符合回退条件的 HTTP 传输错误时，可尝试微软 NCSI 的 `http://www.msftncsi.com/ncsi.txt`，校验预期正文 `Microsoft NCSI`。两次共享 5 秒总期限及同一取消来源，均绑定物理网卡。主地址已收到响应头时继续按原规则处理正文和门户，不用备用结果覆盖。自定义探测仍用单地址和 5 秒期限。两个地址都未确认时完整诊断记录各自结果，取消包装或 CDN 地址轮换不单独触发新的超时诊断。

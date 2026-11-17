@@ -55,6 +55,8 @@ namespace cpu_net.Services
         public static string BriefFailure(Exception ex) => ex switch
         {
             OperationCanceledException => "探测请求超时",
+            PhysicalNetworkException physical => physical.Message,
+            HttpRequestException { InnerException: PhysicalNetworkException physical } => physical.Message,
             HttpRequestException http => $"探测请求失败（{http.HttpRequestError}）",
             System.IO.IOException => "探测响应读取失败",
             _ => $"探测请求异常（{ex.GetType().Name}）"
@@ -76,7 +78,8 @@ namespace cpu_net.Services
             {
                 string reason = current switch
                 {
-                    OperationCanceledException => "请求超时（5秒）",
+                    OperationCanceledException => "请求等待已取消",
+                    PhysicalNetworkException physical => physical.Message,
                     HttpRequestException http => $"HTTP请求失败：{http.HttpRequestError}",
                     SocketException socket => $"网络错误：{socket.SocketErrorCode}，NativeError={socket.NativeErrorCode}",
                     UriFormatException => "响应跳转地址格式无效",
